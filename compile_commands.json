@@ -1,0 +1,18 @@
+[
+  {
+    "arguments": [
+      "g++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-Ilib/glad/include",
+      "-Ilib/stb_image",
+      "-Ilib/glfw/",
+      "-Ilib/glm",
+      "-Ilib"
+    ],
+    "directory": "C:/Users/joech/project/glsl-test",
+    "file": "src/main.cpp"
+  }
+]

@@ -1,0 +1,10 @@
+# Directories
+bin/
+
+# Files
+*.o
+*.d
+*.gch
+*.exe
+.vscode
+.cache
