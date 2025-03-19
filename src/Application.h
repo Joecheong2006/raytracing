@@ -1,7 +1,6 @@
 #pragma once
 #include "VertexBuffer.h"
-#include "VertexBufferLayout.h"
-#include "Texture2D.h"
+#include "Renderer.h"
 #include "stb_image.h"
 #include "glfw3.h"
 #include "imgui/imgui.h"
@@ -10,13 +9,7 @@ struct Quad {
     VertexArray vao;
     VertexBuffer vbo;
     IndexBuffer ibo;
-    Quad(f32* vertices, u32* indices)
-        : vbo(vertices, sizeof(f32) * 8), ibo(indices, 6)
-    {
-        VertexBufferLayout layout;
-        layout.add<float>(2);
-        vao.apply_buffer_layout(layout);
-    }
+    Quad(f32* vertices, u32* indices);
 };
 
 class Application {
@@ -41,13 +34,14 @@ private:
                   forward = glm::vec3(0, 0, 1);
     } cam;
 
-    glm::vec2 resolution;
+    glm::ivec2 resolution;
     bool focus = true;
-    float frameIndex = 0;
+    float frameIndex = 1;
     int bounces = 10;
+    std::vector<float> screen;
 
     void update();
-    void render(const Quad& quad);
+    void render();
     void imguiRender();
 
 public:
