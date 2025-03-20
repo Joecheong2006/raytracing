@@ -30,10 +30,7 @@ public:
     }
 
     void updateBuffer() {
-        materialBuffer.bind();
         materialBuffer.setBuffer(materials.data(), materials.size() * sizeof(Material));
-
-        sphereBuffer.bind();
         sphereBuffer.setBuffer(spheres.data(), spheres.size() * sizeof(Sphere));
     }
 

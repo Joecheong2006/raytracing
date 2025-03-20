@@ -3,7 +3,6 @@
 
 ShaderStorageBuffer::ShaderStorageBuffer(const void* data, u32 size) {
     GLCALL(glGenBuffers(1, &m_id));
-    bind();
     setBuffer(data, size);
 }
 
@@ -12,6 +11,7 @@ ShaderStorageBuffer::~ShaderStorageBuffer() {
 }
 
 void ShaderStorageBuffer::setBuffer(const void* data, u32 size) {
+    bind();
     GLCALL(glBufferData(GL_SHADER_STORAGE_BUFFER, size, data, GL_DYNAMIC_DRAW));
 }
 
