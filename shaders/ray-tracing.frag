@@ -7,6 +7,10 @@ layout(std430, binding = 0) buffer Screen {
     vec4 color[];
 } screen;
 
+struct AABB {
+    vec2 IX, IY, IZ;
+};
+
 struct Material {
     vec3 albedo;
     float roughness;
@@ -19,6 +23,16 @@ struct Sphere {
     float radius;
     vec3 center;
     int materialIndex;
+    int aabbIndex;
+};
+
+struct Quad {
+    vec3 q, u, v;
+    int materialIndex;
+};
+
+layout(std430, binding = 10) readonly buffer AABBBoxes {
+    AABB aabbBoxes[];
 };
 
 layout(std430, binding = 1) readonly buffer Materials {
@@ -132,6 +146,10 @@ bool hitSphere(in Sphere cir, ray r, float max, inout HitInfo info) {
     }
     return true;
 }
+//
+// bool hitQuad(in Quad quad, ray, float max, inout HitInfo info) {
+//     return true;
+// }
 
 void hit(ray r, out HitInfo track) {
     HitInfo tmp;
@@ -152,11 +170,10 @@ void hit(ray r, out HitInfo track) {
 }
 
 vec3 traceColor(ray r, inout double seed) {
-    vec3 incomingLight = vec3(0.0);
-
+    vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1);
 
-    for (int i = 0; i < bounces; ++i) {
+    for (int i = 0; i <= bounces; ++i) {
         seed += i;
 
         HitInfo info;
