@@ -3,6 +3,7 @@
 
 #include <vector>
 #include "util.h"
+#include "AABB.h"
 #include "Material.h"
 #include "Sphere.h"
 #include "OpenGL/ShaderStorageBuffer.h"
@@ -10,6 +11,11 @@
 class World {
 private:
     u32 objectCount = 0;
+    u32 objectAABBCount = 0;
+
+    std::vector<AABB> aabbBoxes;
+    ShaderStorageBuffer aabbBuffer;
+    u32 aabbBindingIndex = 10;
 
     std::vector<Material> materials;
     ShaderStorageBuffer materialBuffer;
@@ -21,37 +27,47 @@ private:
 
 public:
     World()
-        : materialBuffer(nullptr, 0)
+        : aabbBuffer(nullptr, 0)
+        , materialBuffer(nullptr, 0)
         , sphereBuffer(nullptr, 0)
     {}
 
     template <typename T>
-    void add(const T&, const Material&) {
+    void add(const T&, const Material&, bool aabb = false) {
+        (void)aabb;
     }
 
     void updateBuffer() {
+        aabbBuffer.setBuffer(aabbBoxes.data(), aabbBoxes.size() * sizeof(AABB));
         materialBuffer.setBuffer(materials.data(), materials.size() * sizeof(Material));
         sphereBuffer.setBuffer(spheres.data(), spheres.size() * sizeof(Sphere));
     }
 
     void bindBuffer() {
+        aabbBuffer.binding(aabbBindingIndex);
         materialBuffer.binding(materialBindingIndex);
         sphereBuffer.binding(sphereBindingIndex);
     }
 
     void unbindBuffer() {
-        materialBuffer.binding(0);
-        sphereBuffer.binding(0);
+        aabbBuffer.bind();
+        materialBuffer.unbind();
+        sphereBuffer.unbind();
     }
 
 };
 
 template <>
-inline void World::add<Sphere>(const Sphere& sphere, const Material& mat) {
+inline void World::add<Sphere>(const Sphere& sphere, const Material& mat, bool aabb) {
     Sphere cpy = sphere;
     cpy.materialIndex = objectCount++;
-    spheres.push_back(cpy);
     materials.push_back(mat);
+    spheres.push_back(cpy);
+
+    if (aabb) {
+        cpy.AABBIndex = objectAABBCount++;
+        aabbBoxes.push_back(Sphere::GetAABB(sphere));
+    }
 }
 
 #endif
