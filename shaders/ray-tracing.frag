@@ -7,14 +7,26 @@ layout(std430, binding = 0) buffer Screen {
     vec4 color[];
 } screen;
 
-struct sphere {
-    float radius;
-    vec3 center;
-    vec3 color;
+struct Material {
+    vec3 albedo;
+    float roughness;
+
+    vec3 emissionColor;
+    float emissionRate;
 };
 
-layout(std430, binding = 1) readonly buffer Objects {
-    sphere spheres[];
+struct Sphere {
+    float radius;
+    vec3 center;
+    int materialIndex;
+};
+
+layout(std430, binding = 1) readonly buffer Materials {
+    Material materials[];
+};
+
+layout(std430, binding = 2) readonly buffer Objects {
+    Sphere spheres[];
 } obj;
 
 uniform vec2 resolution;
@@ -30,7 +42,7 @@ struct camera {
 uniform camera cam;
 uniform int bounces;
 
-struct hitInfo {
+struct HitInfo {
     vec3 point, normal;
     float t;
     int objId;
@@ -42,22 +54,22 @@ uint pcg(uint v) {
     return (word >> uint(22)) ^ word;
 }
 
-float rand(inout float seed) {
-    seed = float(pcg(uint(seed)));
-    return seed / float(uint(0xffffffff));
+float rand(inout double seed) {
+    seed = double(pcg(uint(seed)));
+    return float(seed) / float(uint(0xffffffff));
 }
 
-float randND(inout float seed) {
+float randND(inout double seed) {
     float theta = 2 * PI * rand(seed);
     float rho = sqrt(-2 * log(rand(seed)));
     return rho * cos(theta);
 }
 
-vec2 rand2(inout float seed) {
+vec2 rand2(inout double seed) {
     return vec2(randND(seed), randND(seed)); 
 }
 
-vec3 rand3(inout float seed) {
+vec3 rand3(inout double seed) {
     return vec3(randND(seed), randND(seed), randND(seed)); 
 }
 
@@ -80,7 +92,7 @@ vec3 reflect(vec3 v, vec3 n) {
     return v - dot(v, n) * n * 2.0;
 }
 
-vec3 randOnHemisphere(vec3 normal, float seed) {
+vec3 randOnHemisphere(vec3 normal, inout double seed) {
     vec3 rv = rand3(seed);
 
     vec3 right = normalize(cross(rv, normal));
@@ -93,7 +105,7 @@ vec3 randOnHemisphere(vec3 normal, float seed) {
     return normalize(rv.x * right + rv.y * normal + rv.z * forward);
 }
 
-bool hitSphere(in sphere cir, ray r, float max, inout hitInfo info) {
+bool hitSphere(in Sphere cir, ray r, float max, inout HitInfo info) {
     vec3 dir = cir.center - r.origin;
     float a = dot(r.direction, r.direction);
     float b = -2.0 * dot(r.direction, dir);
@@ -121,65 +133,56 @@ bool hitSphere(in sphere cir, ray r, float max, inout hitInfo info) {
     return true;
 }
 
-bool hit(ray r, out hitInfo track) {
-    hitInfo tmp;
+void hit(ray r, out HitInfo track) {
+    HitInfo tmp;
 
     float closest = 0xffffff;
-    bool hitSomethings = false;
 
     for (int i = 0; i < obj.spheres.length(); ++i) {
         tmp.objId = i;
         if (hitSphere(obj.spheres[i], r, closest, tmp)) {
-            hitSomethings = true;
             closest = tmp.t;
             track = tmp;
         }
     }
 
-    return hitSomethings; 
+    if (closest == 0xffffff) {
+        track.t = -1;
+    }
 }
 
-vec3 traceColor(ray r) {
-    vec3 color = vec3(0.0);
+vec3 traceColor(ray r, inout double seed) {
+    vec3 incomingLight = vec3(0.0);
 
-    float m = 1.0;
+    vec3 rayColor = vec3(1);
 
-    vec3 light = normalize(-vec3(1, 1, -1));
-    // vec3 light = normalize(vec3(cos(time), 0, sin(time)));
-
-    float seed = frameIndex * (gl_FragCoord.x + gl_FragCoord.y * resolution.x);
     for (int i = 0; i < bounces; ++i) {
         seed += i;
-        hitInfo info;
-        if (hit(r, info)) {
-            // hitInfo i;
-            // if (hit(Ray(info.point + info.normal * 0.0001, -light), i)) {
-            //     return vec3(0);
-            // }
-            float lightIntensity = max(dot(-light, info.normal), 0) * m;
-            color += obj.spheres[info.objId].color * lightIntensity;
 
-            m *= 0.5;
-            float roughness = 0.1;
+        HitInfo info;
+        hit(r, info);
 
-            r.origin = info.point + info.normal * 0.0001;
-
-            // r.direction = info.normal + normalize(rand3(seed)) * rand(seed);
-            // r.direction = randOnHemisphere(info.normal, seed) * rand(seed);
-            r.direction = reflect(r.direction, info.normal + rand3(seed) * 0.5 * roughness);
+        if (info.t < 0.0f) {
+            float t = (r.direction.y + 1) * 0.5;
+            vec3 skyColor = (1.0 - t) * vec3(1) + t * vec3(0.5, 0.7, 1);
+            // skyColor = vec3(0);
+            return incomingLight + skyColor * rayColor; 
         }
-        else {
-            float a = (r.direction.y + 1) * 0.5;
-            vec3 skyColor = (1.0 - a) * vec3(1) + a * vec3(0.5, 0.7, 1);
-            // vec3 skyColor = vec3(0);
-            return color + skyColor * m;
-        }
+
+        r.origin = info.point + info.normal * 0.0001;
+        r.direction = normalize(info.normal + normalize(rand3(seed)));
+
+        int materialIndex = obj.spheres[info.objId].materialIndex;
+
+        incomingLight += materials[materialIndex].emissionColor * materials[materialIndex].emissionRate * rayColor;
+        rayColor *= materials[materialIndex].albedo * dot(info.normal, r.direction);
     }
 
-    return color;
+    return incomingLight;
 }
 
 void main() {
+    // Setup
     vec3 lookat = cam.forward + cam.position;
     vec3 cameraCenter = cam.position;
 
@@ -191,27 +194,28 @@ void main() {
     float viewportWidth = viewportHeight * viewportRatio;
     vec2 viewport = vec2(viewportWidth, viewportHeight);
 
-    vec3 k = normalize(lookat - cameraCenter);
-    vec3 i = normalize(cross(-k, vec3(0.0, 1.0, 0.0)));
-    vec3 j = cross(-i, k);
-    k = cam.forward;
-    i = cam.right;
-    j = cam.up;
-
     vec3 uv = vec3(gl_FragCoord.xy / resolution * 2.0 - 1.0, 0);
-    uv = viewportWidth * 0.5 * i * uv.x + viewportHeight * 0.5 * j * uv.y + focalLength * k + cameraCenter;
+    uv = viewportWidth * 0.5 * uv.x * cam.right
+       + viewportHeight * 0.5 * uv.y * cam.up
+       + focalLength * cam.forward
+       + cameraCenter;
 
     vec2 perPixel = viewport / vec2(resolution.x, resolution.y);
-    float seed = frameIndex * (gl_FragCoord.x + gl_FragCoord.y * resolution.x);
+    double seed = double(frameIndex * (gl_FragCoord.x + gl_FragCoord.y * resolution.x));
 
-    // Random ray
-    ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * i +
-                                     (perPixel.y + randND(seed) / resolution.y) * j) * 0.5
+    // Random ray at pixel center
+    ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * cam.right +
+                                    (perPixel.y + randND(seed) / resolution.y) * cam.up) * 0.5
                                     - cameraCenter);
 
-    vec4 color = vec4(traceColor(r), 1);
+    vec3 color = vec3(0.0);
+    int rayPerPixel = 1;
+    for (int i = 0; i < rayPerPixel; ++i) {
+        color += traceColor(r, seed);
+    }
+    color /= float(rayPerPixel);
 
     int pos = int(gl_FragCoord.x + gl_FragCoord.y * resolution.x);
-    screen.color[pos] = (screen.color[pos] * (float(frameIndex) - 1.0) + color) / float(frameIndex);
+    screen.color[pos] = (screen.color[pos] * (float(frameIndex) - 1.0) + vec4(color, 1)) / float(frameIndex);
 }
 
