@@ -1,6 +1,6 @@
 #pragma once
-#include "VertexBuffer.h"
-#include "Renderer.h"
+#include "OpenGL/VertexBuffer.h"
+#include "OpenGL/Renderer.h"
 #include "stb_image.h"
 #include "glfw3.h"
 #include "imgui/imgui.h"

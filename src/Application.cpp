@@ -1,5 +1,5 @@
 #include "Application.h"
-#include "VertexBufferLayout.h"
+#include "OpenGL/VertexBufferLayout.h"
 #include "glfw3.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
@@ -7,7 +7,9 @@
 #include <cstring>
 #include <string>
 
-#include "ShaderStorageBuffer.h"
+#include "World.h"
+
+#include "OpenGL/ShaderStorageBuffer.h"
 
 #define SHADER_SOURCE_DIRECTORY "shaders/"
 #define DEFAULT_SHADER_NAME "default"
@@ -52,8 +54,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     app->screen = std::vector<float>(width * height * 4, 0.0f);
 }
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && Application::currentShader) {
@@ -264,7 +265,7 @@ void Application::imguiRender() {
     if (ImGui::SliderFloat("zoom", &cam.fov, 1, 179)) {
         frameIndex = 1;
     }
-    if (ImGui::SliderInt("bounces", &bounces, 1, 30)) {
+    if (ImGui::SliderInt("bounces", &bounces, 1, 100)) {
         frameIndex = 1;
     }
 
@@ -306,17 +307,36 @@ void Application::run() {
     screen = std::vector<float>(resolution.y * resolution.x * 4, 0.0f);
     ShaderStorageBuffer screenBuffer(screen.data(), screen.size() * sizeof(float));
 
-    struct sphere {
-        float radius;
-        alignas(16) glm::vec3 center;
-        alignas(16) glm::vec3 color;
+    std::vector<Sphere> objects = {
+        { 50, {0, -50 - 0.2, 1.2}, 0 },
+        { 5, {0, 3, 15}, 1 },
+        { 0.2, {0, 0, 1.2}, 2 },
     };
 
-    std::vector<sphere> objects = {
-        { 50, {0, -50 - 0.2, 1.2}, {0.0, 0.3, 0.3} },
-        { 0.2, {0, 0, 1.2}, {0.3, 0.3, 0.1} },
+    std::vector<Material> materials = {
+        { {1, 1, 1}, 0.5, {0, 0, 0},0 },
+        { {0.9, 0.5, 0.1}, 0.3, {0.9, 0.5, 0.2}, 22 },
+        { {0.6, 0.3, 0.5}, 0.3, {0, 0, 0}, 0 },
     };
-    ShaderStorageBuffer objectBuffer(objects.data(), objects.size() * sizeof(sphere));
+
+    World world;
+
+    world.add<Sphere>(
+            { 50, {0, -50 - 0.2, 1.2}, 0 },
+            { {1, 1, 1}, 0.5, {0, 0, 0}, 0 }
+        );
+
+    world.add<Sphere>(
+            { 5, {0, 3, 15}, 1 },
+            { {0.9, 0.5, 0.1}, 0.3, {0.9, 0.5, 0.2}, 22 }
+        );
+
+    world.add<Sphere>(
+            { 0.2, {0, 0, 1.2}, 2 },
+            { {0.6, 0.3, 0.5}, 0.3, {0, 0, 0}, 0 }
+        );
+
+    world.updateBuffer();
 
     while(!glfwWindowShouldClose(m_window))
     {
@@ -324,20 +344,20 @@ void Application::run() {
         st = glfwGetTime();
 
         quad.vao.bind();
-        screenBuffer.binding(0);
-        objectBuffer.binding(1);
+        world.updateBuffer();
+        world.bindBuffer();
         render();
-        objectBuffer.unbind();
+        world.unbindBuffer();
         screenBuffer.unbind();
 
-        GLCALL(glClear(GL_COLOR_BUFFER_BIT));
         quad.vao.bind();
         screenBuffer.binding(0);
         screenShader.bind();
         screenShader.set_2f("resolution", resolution);
         GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
 
-        std::string dur = "render: " + std::to_string((glfwGetTime() - st) * 1000.0) + "ms";
+        std::string dur = "render: " + std::to_string((glfwGetTime() - st) * 1000.0) + "ms"
+                        + " frameIndex: " + std::to_string(frameIndex);
         glfwSetWindowTitle(m_window, dur.c_str());
 
         ++frameIndex;
