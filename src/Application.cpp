@@ -307,18 +307,6 @@ void Application::run() {
     screen = std::vector<float>(resolution.y * resolution.x * 4, 0.0f);
     ShaderStorageBuffer screenBuffer(screen.data(), screen.size() * sizeof(float));
 
-    std::vector<Sphere> objects = {
-        { 50, {0, -50 - 0.2, 1.2}, 0 },
-        { 5, {0, 3, 15}, 1 },
-        { 0.2, {0, 0, 1.2}, 2 },
-    };
-
-    std::vector<Material> materials = {
-        { {1, 1, 1}, 0.5, {0, 0, 0},0 },
-        { {0.9, 0.5, 0.1}, 0.3, {0.9, 0.5, 0.2}, 22 },
-        { {0.6, 0.3, 0.5}, 0.3, {0, 0, 0}, 0 },
-    };
-
     World world;
 
     world.add<Sphere>(
