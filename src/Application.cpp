@@ -1,5 +1,4 @@
 #include "Application.h"
-#include "OpenGL/VertexBufferLayout.h"
 #include "glfw3.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
@@ -29,14 +28,6 @@ static u32 indices[] = {
     1, 3, 2,
 };
 
-Quad::Quad(f32* vertices, u32* indices)
-    : vbo(vertices, sizeof(f32) * 8), ibo(indices, 6)
-{
-    VertexBufferLayout layout;
-    layout.add<float>(2);
-    vao.apply_buffer_layout(layout);
-}
-
 inline bool file_exist(const std::string& path) {
     std::ifstream file(path);
     return file.is_open();
@@ -47,11 +38,11 @@ inline bool shader_path_exist(const std::string& name) {
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    app->resolution.x = width;
-    app->resolution.y = height;
+    Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
+    det.resolution.x = width;
+    det.resolution.y = height;
     glViewport(0, 0, width, height);
-    app->screen = std::vector<float>(width * height * 4, 0.0f);
+    det.screen = std::vector<float>(width * height * 4, 0.0f);
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -65,17 +56,17 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
     }
 
-    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if(!app->focus && key == GLFW_KEY_F && action == GLFW_PRESS)
+    Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
+    if(!det.focus && key == GLFW_KEY_F && action == GLFW_PRESS)
     {
-        app->focus = true;
+        det.focus = true;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         return;
     }
 
-    if(app->focus && key == GLFW_KEY_F && action == GLFW_PRESS)
+    if(det.focus && key == GLFW_KEY_F && action == GLFW_PRESS)
     {
-        app->focus = false;
+        det.focus = false;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     }
 }
@@ -83,18 +74,17 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     (void)window;
     (void)xoffset;
-    Application::Camera& cam = static_cast<Application*>(glfwGetWindowUserPointer(window))->cam;
-    cam.fov -= yoffset;
+    Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
+    det.cam.fov -= yoffset;
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     static bool first_mouse = true;
     static glm::vec2 last_pos;
 
-    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    Application::Camera& cam = app->cam;
+    Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
 
-    if (!app->focus) {
+    if (!det.focus) {
         first_mouse = true;
         return;
     }
@@ -104,7 +94,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         last_pos.y = ypos;
         first_mouse = false;
     }
-    app->frameIndex = 1;
+    det.frameIndex = 1;
 
     float xoffset = xpos - last_pos.x;
     float yoffset = last_pos.y - ypos; 
@@ -115,21 +105,21 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
-    cam.yaw   += xoffset;
-    cam.pitch += yoffset;
+    det.cam.yaw   += xoffset;
+    det.cam.pitch += yoffset;
 
-    if(cam.pitch > 89.0f)
-        cam.pitch = 89.0f;
-    if(cam.pitch < -89.0f)
-        cam.pitch = -89.0f;
+    if(det.cam.pitch > 89.0f)
+        det.cam.pitch = 89.0f;
+    if(det.cam.pitch < -89.0f)
+        det.cam.pitch = -89.0f;
 
     glm::vec3 direction;
-    direction.x = cos(glm::radians(180 + cam.yaw)) * cos(glm::radians(cam.pitch));
-    direction.y = sin(glm::radians(cam.pitch));
-    direction.z = sin(glm::radians(cam.yaw)) * cos(glm::radians(cam.pitch));
-    cam.forward = glm::normalize(direction);
-    cam.right = normalize(-glm::cross(cam.forward, glm::vec3(0, 1, 0)));
-    cam.up = glm::cross(-cam.right, cam.forward);
+    direction.x = cos(glm::radians(180 + det.cam.yaw)) * cos(glm::radians(det.cam.pitch));
+    direction.y = sin(glm::radians(det.cam.pitch));
+    direction.z = sin(glm::radians(det.cam.yaw)) * cos(glm::radians(det.cam.pitch));
+    det.cam.forward = glm::normalize(direction);
+    det.cam.right = normalize(-glm::cross(det.cam.forward, glm::vec3(0, 1, 0)));
+    det.cam.up = glm::cross(-det.cam.right, det.cam.forward);
 }
 
 Application::Application() {
@@ -139,8 +129,8 @@ Application::Application() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    resolution = glm::ivec2(1920, 1280);
-    m_window = glfwCreateWindow(resolution.x, resolution.y, "glsl test", NULL, NULL);
+    detail.resolution = glm::ivec2(1920, 1280);
+    m_window = glfwCreateWindow(detail.resolution.x, detail.resolution.y, "glsl test", NULL, NULL);
 
     glfwMakeContextCurrent(m_window);
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
@@ -197,24 +187,24 @@ void Application::update() {
         speed  *= 2;
 
     if (glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS) {
-        frameIndex = 1;
-        cam.pos += cam.forward * speed;
+        detail.frameIndex = 1;
+        detail.cam.pos += detail.cam.forward * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS) {
-        frameIndex = 1;
-        cam.pos -= cam.forward * speed;
+        detail.frameIndex = 1;
+        detail.cam.pos -= detail.cam.forward * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS) {
-        frameIndex = 1;
-        cam.pos += cam.right * speed;
+        detail.frameIndex = 1;
+        detail.cam.pos += detail.cam.right * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS) {
-        frameIndex = 1;
-        cam.pos -= cam.right * speed;
+        detail.frameIndex = 1;
+        detail.cam.pos -= detail.cam.right * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-        frameIndex = 1;
-        cam.pos.y += speed;
+        detail.frameIndex = 1;
+        detail.cam.pos.y += speed;
     }
 }
 
@@ -229,17 +219,17 @@ void Application::render() {
 
     currentShader->set_1i("objectSize.SPHERE", 2);
 
-    currentShader->set_2f("resolution", resolution);
-    currentShader->set_1f("frameIndex", frameIndex);
+    currentShader->set_2f("resolution", detail.resolution);
+    currentShader->set_1f("frameIndex", detail.frameIndex);
     currentShader->set_1f("time", glfwGetTime() - start_time);
 
-    currentShader->set_1f("cam.fov", cam.fov);
-    currentShader->set_3f("cam.position", cam.pos);
-    currentShader->set_3f("cam.forward", cam.forward);
-    currentShader->set_3f("cam.right", cam.right);
-    currentShader->set_3f("cam.up", cam.up);
+    currentShader->set_1f("cam.fov", detail.cam.fov);
+    currentShader->set_3f("cam.position", detail.cam.pos);
+    currentShader->set_3f("cam.forward", detail.cam.forward);
+    currentShader->set_3f("cam.right", detail.cam.right);
+    currentShader->set_3f("cam.up", detail.cam.up);
 
-    currentShader->set_1i("bounces", bounces);
+    currentShader->set_1i("bounces", detail.bounces);
 
     GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
 }
@@ -262,11 +252,11 @@ void Application::imguiRender() {
         }
     }
 
-    if (ImGui::SliderFloat("zoom", &cam.fov, 1, 179)) {
-        frameIndex = 1;
+    if (ImGui::SliderFloat("zoom", &detail.cam.fov, 1, 179)) {
+        detail.frameIndex = 1;
     }
-    if (ImGui::SliderInt("bounces", &bounces, 1, 100)) {
-        frameIndex = 1;
+    if (ImGui::SliderInt("bounces", &detail.bounces, 1, 100)) {
+        detail.frameIndex = 1;
     }
 
     ImGui::TextColored(ImVec4(1,1,0,1), "message");
@@ -290,33 +280,35 @@ void Application::run() {
         loadShader(DEFAULT_SHADER_NAME);
     }
 
-    Quad quad(vertices, indices);
     ShaderProgram screenShader;
     screenShader.attach_shader(GL_VERTEX_SHADER, SHADER_SOURCE_DIRECTORY "screen.vert");
     screenShader.attach_shader(GL_FRAGMENT_SHADER, SHADER_SOURCE_DIRECTORY "screen.frag");
     screenShader.link();
     screenShader.bind();
 
+    quad = new Quad(vertices, indices);
+
     glClear(GL_COLOR_BUFFER_BIT);
 
-    cam.pos = glm::vec3(0);
-    cam.forward = glm::vec3(0, 0, 1);
+    detail.cam.pos = glm::vec3(0);
+    detail.cam.forward = glm::vec3(0, 0, 1);
 
     GLCALL(glClearColor(0.1, 0.1, 0.1, 1));
 
-    screen = std::vector<float>(resolution.y * resolution.x * 4, 0.0f);
-    ShaderStorageBuffer screenBuffer(screen.data(), screen.size() * sizeof(float));
+    detail.screen = std::vector<float>(detail.resolution.y * detail.resolution.x * 4, 0.0f);
+    ShaderStorageBuffer screenBuffer(detail.screen.data(), detail.screen.size() * sizeof(float));
 
     World world;
 
     world.add<Sphere>(
             { 50, {0, -50 - 0.2, 1.2}, 0 },
-            { {1, 1, 1}, 0.5, {0, 0, 0}, 0 }
+            { {1, 1, 1}, 0.5, {0, 0, 0}, 0 },
+            true
         );
 
     world.add<Sphere>(
             { 5, {0, 3, 15}, 1 },
-            { {0.9, 0.5, 0.1}, 0.3, {0.9, 0.5, 0.2}, 22 }
+            { {0, 0, 0}, 0.3, {0.9, 0.5, 0.2}, 22 }
         );
 
     world.add<Sphere>(
@@ -331,26 +323,26 @@ void Application::run() {
         static double st;
         st = glfwGetTime();
 
-        quad.vao.bind();
+        quad->vao.bind();
         world.updateBuffer();
         world.bindBuffer();
         render();
         world.unbindBuffer();
         screenBuffer.unbind();
 
-        quad.vao.bind();
+        quad->vao.bind();
         screenBuffer.binding(0);
         screenShader.bind();
-        screenShader.set_2f("resolution", resolution);
+        screenShader.set_2f("resolution", detail.resolution);
         GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
 
         std::string dur = "render: " + std::to_string((glfwGetTime() - st) * 1000.0) + "ms"
-                        + " frameIndex: " + std::to_string(frameIndex);
+                        + " frameIndex: " + std::to_string(detail.frameIndex);
         glfwSetWindowTitle(m_window, dur.c_str());
 
-        ++frameIndex;
+        ++detail.frameIndex;
 
-        if (focus) {
+        if (detail.focus) {
             update();
         }
 
@@ -361,12 +353,12 @@ void Application::run() {
         imguiRender();
 
         glfwSwapBuffers(m_window);
-        glm::ivec2 tmp = resolution;
+        glm::ivec2 tmp = detail.resolution;
         glfwPollEvents();
 
-        if (tmp != resolution) {
-            screenBuffer.setBuffer(screen.data(), screen.size() * sizeof(float));
-            frameIndex = 1;
+        if (tmp != detail.resolution) {
+            screenBuffer.setBuffer(detail.screen.data(), detail.screen.size() * sizeof(float));
+            detail.frameIndex = 1;
         }
     }
 }
