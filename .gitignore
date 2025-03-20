@@ -6,5 +6,6 @@ bin/
 *.d
 *.gch
 *.exe
+*.ini
 .vscode
 .cache
