@@ -1,10 +1,5 @@
 #pragma once
 
-#include "glad/glad.h"
-#include "glfw/glfw3.h"
-#include <iostream>
-
-
 #ifdef __linux__
 #define ASSERT(x) if(!(x)) __builtin_trap()
 #else

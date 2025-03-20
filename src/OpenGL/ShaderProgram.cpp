@@ -1,8 +1,8 @@
 #include "ShaderProgram.h"
 #include "Renderer.h"
 #include <fstream>
+#include "glad/glad.h"
 
-#include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
 ShaderProgram::ShaderProgram()

@@ -8,6 +8,7 @@ private:
     u32 m_count;
 
 public:
+    IndexBuffer() = default;
     IndexBuffer(const u32* data, u32 count);
     ~IndexBuffer();
 

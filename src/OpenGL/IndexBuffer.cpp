@@ -1,15 +1,13 @@
 #include "IndexBuffer.h"
 #include "Renderer.h"
-
+#include "glad/glad.h"
 
 IndexBuffer::IndexBuffer(const u32* data, u32 count)
     : m_count(count)
 {
-    ASSERT(sizeof(u32) == sizeof(GLuint));
     GLCALL(glGenBuffers(1, &m_id));
     GLCALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_id));
-    GLCALL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32)*count, data, GL_STATIC_DRAW));
-
+    GLCALL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * count, data, GL_STATIC_DRAW));
 }
 
 IndexBuffer::~IndexBuffer()

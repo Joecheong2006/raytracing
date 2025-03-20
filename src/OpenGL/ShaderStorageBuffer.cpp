@@ -1,4 +1,5 @@
 #include "ShaderStorageBuffer.h"
+#include "glad/glad.h"
 #include "Renderer.h"
 
 ShaderStorageBuffer::ShaderStorageBuffer(const void* data, u32 size) {

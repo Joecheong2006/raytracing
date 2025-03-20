@@ -1,4 +1,5 @@
 #include "Texture2D.h"
+#include "glad/glad.h"
 #include "stb_image.h"
 
 void Texture2D::initialize(i32 width, i32 height, u32 internal_format, u32 format, u32 type, u32 wrap, u32 min_filter, u32 mag_filter) {

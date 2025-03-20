@@ -7,6 +7,7 @@ private:
     u32 m_id;
 
 public:
+    VertexBuffer() = default;
     VertexBuffer(const void* data, u32 size);
     ~VertexBuffer();
 

@@ -1,4 +1,6 @@
 #include "FrameBufferObject.h"
+#include <iostream>
+#include "glad/glad.h"
 
 FrameBufferObject::FrameBufferObject(const Texture2D& tex, u32 slot) {
     GLCALL(glGenFramebuffers(1, &m_id));
