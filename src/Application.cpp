@@ -76,6 +76,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     (void)xoffset;
     Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
     det.cam.fov -= yoffset;
+    // det.frameIndex = 1;
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -302,18 +303,17 @@ void Application::run() {
 
     world.add<Sphere>(
             { 50, {0, -50 - 0.2, 1.2}, 0 },
-            { {1, 1, 1}, 0.5, {0, 0, 0}, 0 },
-            true
+            { {1, 1, 1}, 1.0, {0, 0, 0}, 0 }, true
         );
 
     world.add<Sphere>(
             { 5, {0, 3, 15}, 1 },
-            { {0, 0, 0}, 0.3, {0.9, 0.5, 0.2}, 22 }
+            { {0, 0, 0}, 0.3, {1, 1, 1}, 20 }, false
         );
 
     world.add<Sphere>(
             { 0.2, {0, 0, 1.2}, 2 },
-            { {0.6, 0.3, 0.5}, 0.3, {0, 0, 0}, 0 }
+            { {0.6, 0.3, 0.5}, 0.1, {0, 0, 0}, 0 }, true
         );
 
     world.updateBuffer();

@@ -32,7 +32,7 @@ private:
         glm::ivec2 resolution;
         bool focus = true;
         float frameIndex = 1;
-        int bounces = 10;
+        int bounces = 5;
         std::vector<float> screen;
     } detail;
 
