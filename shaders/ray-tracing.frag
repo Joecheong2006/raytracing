@@ -8,7 +8,7 @@ layout(std430, binding = 0) buffer Screen {
 } screen;
 
 struct AABB {
-    vec2 IX, IY, IZ;
+    vec2 interval[3];
 };
 
 struct Material {
@@ -36,7 +36,7 @@ layout(std430, binding = 10) readonly buffer AABBBoxes {
 };
 
 layout(std430, binding = 1) readonly buffer Materials {
-    Material materials[];
+    Material mats[];
 };
 
 layout(std430, binding = 2) readonly buffer Objects {
@@ -119,7 +119,21 @@ vec3 randOnHemisphere(vec3 normal, inout double seed) {
     return normalize(rv.x * right + rv.y * normal + rv.z * forward);
 }
 
-bool hitSphere(in Sphere cir, ray r, float max, inout HitInfo info) {
+bool hitAABB(in AABB aabb, in ray r, in float m) {
+    vec2 RI = vec2(0, m);
+
+    for (int axis = 0; axis < 3; ++axis) {
+        float adinv = 1.0 / r.direction[axis];
+        float t0 = (aabb.interval[axis][0] - r.origin[axis]) * adinv;
+        float t1 = (aabb.interval[axis][1] - r.origin[axis]) * adinv;
+        if (min(t0, t1) > max(t0, t1)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool hitSphere(in Sphere cir, in ray r, in float max, inout HitInfo info) {
     vec3 dir = cir.center - r.origin;
     float a = dot(r.direction, r.direction);
     float b = -2.0 * dot(r.direction, dir);
@@ -146,7 +160,7 @@ bool hitSphere(in Sphere cir, ray r, float max, inout HitInfo info) {
     }
     return true;
 }
-//
+
 // bool hitQuad(in Quad quad, ray, float max, inout HitInfo info) {
 //     return true;
 // }
@@ -158,7 +172,18 @@ void hit(ray r, out HitInfo track) {
 
     for (int i = 0; i < obj.spheres.length(); ++i) {
         tmp.objId = i;
-        if (hitSphere(obj.spheres[i], r, closest, tmp)) {
+
+        int aabbIndex = obj.spheres[i].aabbIndex;
+
+        if (aabbIndex < 0) {
+            if (hitSphere(obj.spheres[i], r, closest, tmp)) {
+                closest = tmp.t;
+                track = tmp;
+            }
+            continue;
+        }
+
+        if (hitAABB(aabbBoxes[aabbIndex], r, closest) && hitSphere(obj.spheres[i], r, closest, tmp)) {
             closest = tmp.t;
             track = tmp;
         }
@@ -182,17 +207,29 @@ vec3 traceColor(ray r, inout double seed) {
         if (info.t < 0.0f) {
             float t = (r.direction.y + 1) * 0.5;
             vec3 skyColor = (1.0 - t) * vec3(1) + t * vec3(0.5, 0.7, 1);
-            // skyColor = vec3(0);
             return incomingLight + skyColor * rayColor; 
         }
 
-        r.origin = info.point + info.normal * 0.0001;
-        r.direction = normalize(info.normal + normalize(rand3(seed)));
+        vec3 N = info.normal;
+        vec3 V = r.direction;
 
-        int materialIndex = obj.spheres[info.objId].materialIndex;
+        int matIndex = obj.spheres[info.objId].materialIndex;
 
-        incomingLight += materials[materialIndex].emissionColor * materials[materialIndex].emissionRate * rayColor;
-        rayColor *= materials[materialIndex].albedo * dot(info.normal, r.direction);
+        vec3 diffuseDir = normalize(N + normalize(rand3(seed)));
+        float diffuse = max(dot(N, diffuseDir), 0);
+        vec3 diffuseColor = mats[matIndex].albedo * diffuse;
+
+        vec3 specularDir = reflect(V, N);
+        vec3 halfwayDir = normalize(-V + specularDir);
+        float specAngle = max(dot(N, halfwayDir), 0.0);
+        float specular = pow(specAngle, mats[matIndex].roughness * 128.0);
+        vec3 specularColor = mats[matIndex].albedo * specular;
+
+        vec3 nextDir = mix(specularDir, diffuseDir, mats[matIndex].roughness);
+        r = Ray(info.point + nextDir * 0.0001, nextDir);
+
+        incomingLight += mats[matIndex].emissionColor * mats[matIndex].emissionRate * rayColor;
+        rayColor *= mix(specularColor,diffuseColor, mats[matIndex].roughness);
     }
 
     return incomingLight;
@@ -221,13 +258,13 @@ void main() {
     double seed = double(frameIndex * (gl_FragCoord.x + gl_FragCoord.y * resolution.x));
 
     // Random ray at pixel center
-    ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * cam.right +
-                                    (perPixel.y + randND(seed) / resolution.y) * cam.up) * 0.5
-                                    - cameraCenter);
-
     vec3 color = vec3(0.0);
     int rayPerPixel = 1;
     for (int i = 0; i < rayPerPixel; ++i) {
+        seed += i;
+        ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * cam.right +
+                                        (perPixel.y + randND(seed) / resolution.y) * cam.up) * 0.5
+                                        - cameraCenter);
         color += traceColor(r, seed);
     }
     color /= float(rayPerPixel);
