@@ -59,15 +59,19 @@ public:
 
 template <>
 inline void World::add<Sphere>(const Sphere& sphere, const Material& mat, bool aabb) {
+    materials.push_back(mat);
+
     Sphere cpy = sphere;
     cpy.materialIndex = objectCount++;
-    materials.push_back(mat);
-    spheres.push_back(cpy);
 
     if (aabb) {
-        cpy.AABBIndex = objectAABBCount++;
+        cpy.aabbIndex = objectAABBCount++;
         aabbBoxes.push_back(Sphere::GetAABB(sphere));
     }
+    else {
+        cpy.aabbIndex = -1;
+    }
+    spheres.push_back(cpy);
 }
 
 #endif
