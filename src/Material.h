@@ -8,7 +8,7 @@ struct Material {
     float roughness;
 
     alignas(16) glm::vec3 emissionColor;
-    float emissionRate;
+    float emissionStrength;
 };
 
 #endif

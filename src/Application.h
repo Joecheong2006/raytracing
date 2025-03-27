@@ -1,9 +1,10 @@
 #pragma once
-#include "OpenGL/Quad.h"
+#include "OpenGL/glQuad.h"
 #include "OpenGL/ShaderProgram.h"
 #include "stb_image.h"
 #include "glfw3.h"
 #include "imgui/imgui.h"
+#include "World.h"
 
 class Application {
 private:
@@ -18,7 +19,7 @@ private:
     friend void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
     friend void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 
-    Quad* quad;
+    glQuad* quad;
     struct Detail {
         struct Camera {
             glm::vec3 pos;
@@ -32,9 +33,11 @@ private:
         glm::ivec2 resolution;
         bool focus = true;
         float frameIndex = 1;
-        int bounces = 5;
+        int bounces = 5, rayPerPixel = 2;
         std::vector<float> screen;
     } detail;
+
+    World* world;
 
     void update();
     void render();

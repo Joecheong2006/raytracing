@@ -44,10 +44,18 @@ Texture2D::~Texture2D()
     GLCALL(glDeleteTextures(1, &m_id));
 }
 
+void Texture2D::storage(i32 width, i32 height, i32 format) {
+    GLCALL(glTexStorage2D(GL_TEXTURE_2D, 1, format, width, height));
+}
+
 void Texture2D::bind(u32 slot) const
 {
     GLCALL(glActiveTexture(GL_TEXTURE0 + slot));
     GLCALL(glBindTexture(GL_TEXTURE_2D, m_id));
+}
+
+void Texture2D::bindImage(u32 access, u32 format) {
+    glBindImageTexture(0, m_id, 0, GL_FALSE, 0, access, format);
 }
 
 void Texture2D::unbind() const

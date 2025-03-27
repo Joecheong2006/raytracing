@@ -9,6 +9,7 @@ layout(std430, binding = 0) buffer screen {
 in vec2 texCoord;
 
 uniform vec2 resolution;
+uniform sampler2D tex;
 
 void main() {
     frag_color = vec4(colors[int(gl_FragCoord.x + gl_FragCoord.y * resolution.x)], 1);

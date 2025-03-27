@@ -1,12 +1,13 @@
 #include "Application.h"
+#include "OpenGL/VertexBufferLayout.h"
 #include "glfw3.h"
+#include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
+#include "glm/gtc/type_ptr.hpp"
 #include <fstream>
 #include <cstring>
 #include <string>
-
-#include "World.h"
 
 #include "OpenGL/ShaderStorageBuffer.h"
 
@@ -17,10 +18,10 @@ ShaderProgram* Application::currentShader;
 std::string Application::shaderName = "ray-tracing";
 
 static f32 vertices[] = {
-     1.0,  1.0,
-    -1.0,  1.0,
-     1.0, -1.0,
-    -1.0, -1.0,
+     1.0,  1.0, 1, 1,
+    -1.0,  1.0, 0, 1,
+     1.0, -1.0, 1, 0,
+    -1.0, -1.0, 0, 0
 };
 
 static u32 indices[] = {
@@ -148,6 +149,7 @@ Application::Application() {
 
     GLCALL(glEnable(GL_BLEND));
     GLCALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+    glfwSwapInterval(1);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -231,6 +233,7 @@ void Application::render() {
     currentShader->set_3f("cam.up", detail.cam.up);
 
     currentShader->set_1i("bounces", detail.bounces);
+    currentShader->set_1i("rayPerPixel", detail.rayPerPixel);
 
     GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
 }
@@ -259,6 +262,28 @@ void Application::imguiRender() {
     if (ImGui::SliderInt("bounces", &detail.bounces, 1, 100)) {
         detail.frameIndex = 1;
     }
+    if (ImGui::SliderInt("rayPerPixel", &detail.rayPerPixel, 1, 10)) {
+        detail.frameIndex = 1;
+    }
+
+    ImGui::BeginChild("Scene");
+    auto& materials = world->getMaterials();
+    bool hasChanged = false;
+    for (u32 i = 0; i < materials.size(); ++i) {
+        ImGui::PushID(i);
+        if (ImGui::ColorEdit3("albedo", glm::value_ptr(materials[i].albedo)) ||
+            ImGui::SliderFloat("roughness", &materials[i].roughness, 0, 1) ||
+            ImGui::ColorEdit3("emissionColor", glm::value_ptr(materials[i].emissionColor)) ||
+            ImGui::SliderFloat("emissionStrength", &materials[i].emissionStrength, 0, 500)) {
+            detail.frameIndex = 1;
+            hasChanged = true;
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    if (hasChanged) {
+        world->updateBuffer();
+    }
 
     ImGui::TextColored(ImVec4(1,1,0,1), "message");
     ImGui::BeginChild("Scrolling");
@@ -271,6 +296,133 @@ void Application::imguiRender() {
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void loadCornellBox(World* world, float boxLen = 3, float lightLen = 0.7) {
+    glm::vec3 pos = {-boxLen * 0.5, -1.4, 2 * boxLen};
+ 
+    world->add<Quad>(
+            { {pos.x, pos.y, pos.z}, {boxLen, 0, 0}, {0, 0, -boxLen} },
+            { {1, 1, 1}, 1, {0, 0, 0}, 0 }, false
+        );
+
+    world->add<Quad>(
+            { {pos.x + boxLen, pos.y + boxLen, pos.z}, {-boxLen, 0, 0}, {0, 0, -boxLen} },
+            { {1, 1, 1}, 1, {0, 0, 0}, 0 }, false
+        );
+
+    world->add<Quad>(
+            { {pos.x + boxLen, pos.y, pos.z}, {-boxLen, 0, 0}, {0, boxLen, 0} },
+            { {1, 1, 1}, 1, {0, 0, 0}, 0 }, false
+        );
+
+    world->add<Quad>(
+            { {pos.x, pos.y, pos.z - boxLen}, {boxLen, 0, 0}, {0, boxLen, 0} },
+            { {1, 1, 1}, 1, {0, 0, 0}, 0 }, false
+        );
+
+    world->add<Quad>(
+            { {pos.x, pos.y, pos.z - boxLen}, {0, boxLen, 0}, {0, 0, boxLen} },
+            { {0.63, 0.065, 0.05}, 1, {0, 0, 0}, 0 }, false
+        );
+
+    world->add<Quad>(
+            { {pos.x + boxLen, pos.y, pos.z}, {0, boxLen, 0}, {0, 0, -boxLen} },
+            { {0.14, 0.45, 0.091}, 1, {0, 0, 0}, 0 }, false
+        );
+
+    world->add<Quad>(
+            { {pos.x + boxLen * 0.5 + lightLen * 0.5, pos.y + boxLen - 0.000001, pos.z - lightLen * 0.5 - lightLen}, {-lightLen, 0, 0}, {0, 0, -lightLen} },
+            { {0, 0, 0}, 0, {1, 1, 1}, 150}, false
+        );
+}
+
+void loadBox(World* world, glm::vec2 len, glm::vec3 pos, float degree) {
+    glm::mat3 r = glm::rotate(glm::mat4(1), glm::radians(degree), {0, 1, 0});
+
+    glm::vec3 b1Vertex[] = {
+        glm::vec3{len.x, 0, len.x} * 0.5f * r,
+        glm::vec3{-len.x, 0, len.x} * 0.5f * r,
+        glm::vec3{-len.x, 0, -len.x} * 0.5f * r,
+        glm::vec3{len.x, 0, -len.x} * 0.5f * r,
+        glm::vec3{len.x, len.y * 2.0f, len.x} * 0.5f * r,
+        glm::vec3{-len.x, len.y * 2.0f, len.x} * 0.5f * r,
+        glm::vec3{-len.x, len.y * 2.0f, -len.x} * 0.5f * r,
+        glm::vec3{len.x, len.y * 2.0f, -len.x} * 0.5f * r,
+    };
+
+    world->add<Quad>(
+            { pos + b1Vertex[0], b1Vertex[4] - b1Vertex[0], b1Vertex[1] - b1Vertex[0]},
+            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false
+        );
+
+    world->add<Quad>(
+            { pos + b1Vertex[1], b1Vertex[5] - b1Vertex[1], b1Vertex[2] - b1Vertex[1]},
+            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false
+        );
+
+    world->add<Quad>(
+            { pos + b1Vertex[2], b1Vertex[6] - b1Vertex[2], b1Vertex[3] - b1Vertex[2] },
+            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false
+        );
+
+    world->add<Quad>(
+            { pos + b1Vertex[3], b1Vertex[7] - b1Vertex[3], b1Vertex[0] - b1Vertex[3] },
+            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false
+        );
+
+    world->add<Quad>(
+            { pos + b1Vertex[4], b1Vertex[3] - b1Vertex[0], b1Vertex[1] - b1Vertex[0]},
+            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false
+        );
+}
+
+void loadScene1(World* world) {
+    world->add<Sphere>(
+            { 50, {0, -50 - 0.2, 1.2}, 0 },
+            { {0.7, 0.7, 0.7}, 1.0, {0, 0, 0}, 0 }, true
+        );
+    
+    world->add<Sphere>(
+            { 5, {0, 3, 15}, 1 },
+            { {0, 0, 0}, 0.3, {1, 1, 1}, 20 }, false
+        );
+
+    world->add<Sphere>(
+            { 0.2, {0, 0, 1.2}, 2 },
+            { {0.6, 0.3, 0.5}, 0.0, {0, 0, 0}, 0 }, true
+        );
+
+    world->add<Sphere>(
+            { 0.2, {0.5, 0, 1.2}, 2 },
+            { {0.3, 0.8, 0.5}, 0.1, {0, 0, 0}, 0 }, true
+        );
+}
+
+void loadScene2(World* world) {
+    float boxLen = 3;
+    float lightLen = 0.7;
+    glm::vec3 pos = {-boxLen * 0.5, -1.4, 2 * boxLen};
+    glm::vec3 center = pos + glm::vec3{boxLen, 0, -boxLen} * 0.5f;
+    loadCornellBox(world, boxLen, lightLen);
+
+    world->add<Sphere>(
+            { 0.5, center + glm::vec3{0, 1, 0}, 2 },
+            { {1, 1, 1}, 0.1, {0, 0, 0}, 0 }, true
+        );
+}
+
+void loadScene3(World* world) {
+    float boxLen = 4;
+    float lightLen = 1.1;
+    glm::vec3 pos = {-boxLen * 0.5, -1.4, 2 * boxLen};
+    loadCornellBox(world, boxLen, lightLen);
+
+    glm::vec2 b1Len = {1.2, 2.4};
+    glm::vec3 b1Pos = {1.2, 0, 1.3};
+    glm::vec3 b2Pos = {2.64, 0, 2.5};
+    loadBox(world, b1Len, {pos.x + b1Pos.x, pos.y + b1Pos.y, pos.z - b1Pos.z}, 20);
+    loadBox(world, {1.15, 1.15}, {pos.x + b2Pos.x, pos.y + b2Pos.y, pos.z - b2Pos.z}, -17);
 }
 
 void Application::run() {
@@ -287,7 +439,7 @@ void Application::run() {
     screenShader.link();
     screenShader.bind();
 
-    quad = new Quad(vertices, indices);
+    quad = new glQuad(vertices, indices);
 
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -299,24 +451,13 @@ void Application::run() {
     detail.screen = std::vector<float>(detail.resolution.y * detail.resolution.x * 4, 0.0f);
     ShaderStorageBuffer screenBuffer(detail.screen.data(), detail.screen.size() * sizeof(float));
 
-    World world;
+    world = new World();
 
-    world.add<Sphere>(
-            { 50, {0, -50 - 0.2, 1.2}, 0 },
-            { {1, 1, 1}, 1.0, {0, 0, 0}, 0 }, true
-        );
+    // loadScene1(world);
+    // loadScene2(world);
+    loadScene3(world);
 
-    world.add<Sphere>(
-            { 5, {0, 3, 15}, 1 },
-            { {0, 0, 0}, 0.3, {1, 1, 1}, 20 }, false
-        );
-
-    world.add<Sphere>(
-            { 0.2, {0, 0, 1.2}, 2 },
-            { {0.6, 0.3, 0.5}, 0.1, {0, 0, 0}, 0 }, true
-        );
-
-    world.updateBuffer();
+    world->updateBuffer();
 
     while(!glfwWindowShouldClose(m_window))
     {
@@ -324,15 +465,14 @@ void Application::run() {
         st = glfwGetTime();
 
         quad->vao.bind();
-        world.updateBuffer();
-        world.bindBuffer();
+        world->bindBuffer();
         render();
-        world.unbindBuffer();
+        world->unbindBuffer();
         screenBuffer.unbind();
 
         quad->vao.bind();
-        screenBuffer.binding(0);
         screenShader.bind();
+        screenBuffer.binding(0);
         screenShader.set_2f("resolution", detail.resolution);
         GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
 
