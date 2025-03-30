@@ -14,7 +14,7 @@
 #define SHADER_SOURCE_DIRECTORY "shaders/"
 #define DEFAULT_SHADER_NAME "default"
 
-ShaderProgram* Application::currentShader;
+gl::ShaderProgram* Application::currentShader;
 std::string Application::shaderName = "ray-tracing";
 
 static f32 vertices[] = {
@@ -426,20 +426,20 @@ void loadScene3(World* world) {
 }
 
 void Application::run() {
-    currentShader = new ShaderProgram();
+    currentShader = new gl::ShaderProgram();
     if (shader_path_exist(shaderName)) {
         loadShader(shaderName);
     } else {
         loadShader(DEFAULT_SHADER_NAME);
     }
 
-    ShaderProgram screenShader;
+    gl::ShaderProgram screenShader;
     screenShader.attach_shader(GL_VERTEX_SHADER, SHADER_SOURCE_DIRECTORY "screen.vert");
     screenShader.attach_shader(GL_FRAGMENT_SHADER, SHADER_SOURCE_DIRECTORY "screen.frag");
     screenShader.link();
     screenShader.bind();
 
-    quad = new glQuad(vertices, indices);
+    quad = new gl::Quad(vertices, indices);
 
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -449,7 +449,7 @@ void Application::run() {
     GLCALL(glClearColor(0.1, 0.1, 0.1, 1));
 
     detail.screen = std::vector<float>(detail.resolution.y * detail.resolution.x * 4, 0.0f);
-    ShaderStorageBuffer screenBuffer(detail.screen.data(), detail.screen.size() * sizeof(float));
+    gl::ShaderStorageBuffer screenBuffer(detail.screen.data(), detail.screen.size() * sizeof(float));
 
     world = new World();
 

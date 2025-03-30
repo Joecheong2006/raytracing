@@ -1,5 +1,5 @@
 #pragma once
-#include "OpenGL/glQuad.h"
+#include "OpenGL/Quad.h"
 #include "OpenGL/ShaderProgram.h"
 #include "stb_image.h"
 #include "glfw3.h"
@@ -10,7 +10,7 @@ class Application {
 private:
     GLFWwindow* m_window;
     ImGuiIO m_imguiIO;
-    static ShaderProgram* currentShader;
+    static gl::ShaderProgram* currentShader;
     static std::string shaderName;
     static void loadShader(const std::string& name);
 
@@ -19,7 +19,7 @@ private:
     friend void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
     friend void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 
-    glQuad* quad;
+    gl::Quad* quad;
     struct Detail {
         struct Camera {
             glm::vec3 pos;

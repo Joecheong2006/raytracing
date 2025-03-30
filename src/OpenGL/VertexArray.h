@@ -2,17 +2,20 @@
 
 #include "../util.h"
 
-class VertexBufferLayout;
-class VertexArray
-{
-private:
-    u32 m_id;
+namespace gl {
+    class VertexBufferLayout;
+    class VertexArray
+    {
+    private:
+        u32 m_id;
 
-public:
-    VertexArray();
-    ~VertexArray();
+    public:
+        VertexArray();
+        ~VertexArray();
 
-    void apply_buffer_layout(const VertexBufferLayout& layout);
-    void bind() const;
-    void unbind() const;
-};
+        void apply_buffer_layout(const VertexBufferLayout& layout);
+        void bind() const;
+        void unbind() const;
+    };
+
+}

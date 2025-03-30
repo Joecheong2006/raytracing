@@ -2,6 +2,7 @@
 #include <iostream>
 #include "glad/glad.h"
 
+namespace gl {
 FrameBufferObject::FrameBufferObject(const Texture2D& tex, u32 slot) {
     GLCALL(glGenFramebuffers(1, &m_id));
 
@@ -27,4 +28,6 @@ void FrameBufferObject::bindTexture(const Texture2D& tex, u32 slot) {
 
 void FrameBufferObject::unbind() const {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 }

@@ -15,19 +15,19 @@ private:
     u32 objectAABBCount = 0;
 
     std::vector<AABB> aabbBoxes;
-    ShaderStorageBuffer aabbBuffer;
+    gl::ShaderStorageBuffer aabbBuffer;
     u32 aabbBindingIndex = 10;
 
     std::vector<Material> materials;
-    ShaderStorageBuffer materialBuffer;
+    gl::ShaderStorageBuffer materialBuffer;
     u32 materialBindingIndex = 1;
 
     std::vector<Sphere> spheres;
-    ShaderStorageBuffer sphereBuffer;
+    gl::ShaderStorageBuffer sphereBuffer;
     u32 sphereBindingIndex = 2;
 
     std::vector<Quad> quads;
-    ShaderStorageBuffer quadBuffer;
+    gl::ShaderStorageBuffer quadBuffer;
     u32 quadBindingIndex = 3;
 
 public:
