@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Renderer.h"
+#include "../util.h"
+#include <string>
 
 namespace gl {
     class FrameBufferObject;
@@ -21,10 +22,7 @@ namespace gl {
         Texture2D(const std::string& path, u32 wrap, u32 min_filter, u32 mag_filter);
         ~Texture2D();
 
-        void storage(i32 width, i32 height, i32 format);
-
         void bind(u32 slot = 0) const;
-        void bindImage(u32 access, u32 format);
         void unbind() const;
 
         inline i32 width() { return m_width; }

@@ -2,12 +2,10 @@
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
+layout(rgba32f, binding = 0) uniform image2D screenColors;
+
 #define PI 3.1415926
 #define RAD(x) ((x) * PI / 180.0)
-
-layout(std430, binding = 0) buffer Screen {
-    vec4 color[];
-} screen;
 
 struct AABB {
     vec2 interval[3];
@@ -16,7 +14,6 @@ struct AABB {
 struct Material {
     vec3 albedo;
     float roughness;
-    float specular;
 
     vec3 emissionColor;
     float emissionStrength;
@@ -51,19 +48,16 @@ layout(std430, binding = 3) readonly buffer Quads {
     Quad quads[];
 };
 
-uniform vec2 resolution;
 uniform float frameIndex;
-uniform float time;
 
 struct camera {
     float fov;
     vec3 position;
     vec3 forward, right, up;
+    int bounces, rayPerPixel;
 };
 
 uniform camera cam;
-uniform int bounces;
-uniform int rayPerPixel;
 
 struct HitInfo {
     vec3 point, normal;
@@ -247,26 +241,25 @@ void hit(ray r, out HitInfo track) {
         }
     }
 
-    if (closest == 0xffffff) {
-        track.t = -1;
-    }
+    track.t = closest;
 }
 
 vec3 traceColor(ray r, inout double seed) {
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1);
 
-    for (int i = 0; i <= bounces; ++i) {
+    for (int i = 0; i < cam.bounces; ++i) {
         seed += i;
 
         HitInfo info;
         hit(r, info);
 
-        if (info.t < 0.0f) {
+        if (info.t == 0xffffff) {
             float t = (r.direction.y + 1) * 0.5;
             vec3 skyColor = (1.0 - t) * vec3(1) + t * vec3(0.5, 0.7, 1);
             skyColor = vec3(0);
-            return incomingLight + skyColor * rayColor; 
+            incomingLight += skyColor * rayColor;
+            break;
         }
 
         vec3 N = info.normal;
@@ -275,33 +268,31 @@ vec3 traceColor(ray r, inout double seed) {
         int matIndex = info.matId;
 
         vec3 diffuseDir = normalize(N + normalize(rand3(seed)));
-        float diffuse = max(dot(N, diffuseDir), 0) / PI;
-
         vec3 specularDir = reflect(V, N);
 
-        float isSpecularBounce = float(mats[matIndex].specular >= rand(seed));
-
-        vec3 nextDir = mix(specularDir, diffuseDir, mats[matIndex].roughness * (1.f - isSpecularBounce));
+        vec3 nextDir = mix(specularDir, diffuseDir, mats[matIndex].roughness);
         r = Ray(info.point + nextDir * 0.0001, nextDir);
 
         incomingLight += mats[matIndex].emissionColor * mats[matIndex].emissionStrength * rayColor;
-        rayColor *= mix(mats[matIndex].albedo * diffuse, vec3(1), isSpecularBounce);
+        // rayColor *= mix(mats[matIndex].albedo, vec3(1), 1 - mats[matIndex].roughness);
+        rayColor *= mats[matIndex].albedo;
     }
 
-    return incomingLight / bounces;
+    return incomingLight;
 }
 
 void main() {
     ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
-    if (fragCoord.x >= resolution.x || fragCoord.y >= resolution.y) {
-        return; // Skip out-of-bound threads
+    ivec2 imgSize = imageSize(screenColors);
+    if (fragCoord.x >= imgSize.x || fragCoord.y >= imgSize.y) {
+        return;
     }
 
     // Setup
     vec3 lookat = cam.forward + cam.position;
     vec3 cameraCenter = cam.position;
 
-    float viewportRatio = resolution.x / resolution.y;
+    float viewportRatio = imgSize.x / float(imgSize.y);
     float focalLength = length(lookat - cameraCenter);
     float fov = cam.fov;
 
@@ -309,27 +300,26 @@ void main() {
     float viewportWidth = viewportHeight * viewportRatio;
     vec2 viewport = vec2(viewportWidth, viewportHeight);
 
-    vec3 uv = vec3(fragCoord.xy / resolution * 2.0 - 1.0, 0);
+    vec3 uv = vec3(fragCoord / vec2(imgSize) * 2.0 - 1.0, 0);
     uv = viewportWidth * 0.5 * uv.x * cam.right
        + viewportHeight * 0.5 * uv.y * cam.up
        + focalLength * cam.forward
        + cameraCenter;
 
-    vec2 perPixel = viewport / vec2(resolution.x, resolution.y);
-    double seed = double(frameIndex * (fragCoord.x + fragCoord.y * resolution.x));
+    vec2 perPixel = viewport / vec2(imgSize.x, imgSize.y);
 
     // Random ray at pixel center
-    ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * cam.right +
-                                    (perPixel.y + randND(seed) / resolution.y) * cam.up) * 0.5
-                                    - cameraCenter);
-
+    double seed = double(frameIndex * (fragCoord.x + fragCoord.y * imgSize.x));
     vec3 color = vec3(0.0);
-    for (int i = 0; i < rayPerPixel; ++i) {
+    for (int i = 0; i < cam.rayPerPixel; ++i) {
         seed += i;
+        ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / imgSize.x) * cam.right +
+                                    (perPixel.y + randND(seed) / imgSize.y) * cam.up) * 0.5
+                                    - cameraCenter);
         color += traceColor(r, seed);
     }
-    color /= float(rayPerPixel);
+    color /= float(cam.rayPerPixel);
 
-    int pos = int(fragCoord.x + fragCoord.y * resolution.x);
-    screen.color[pos] = (screen.color[pos] * (float(frameIndex) - 1.0) + vec4(color, 1)) / float(frameIndex);
+    vec4 finalColor = (imageLoad(screenColors, fragCoord) * (float(frameIndex) - 1.0) + vec4(color, 1)) / float(frameIndex);
+    imageStore(screenColors, fragCoord, finalColor);
 }

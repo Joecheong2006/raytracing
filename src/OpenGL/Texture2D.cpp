@@ -1,6 +1,7 @@
 #include "Texture2D.h"
 #include "glad/glad.h"
 #include "stb_image.h"
+#include "Renderer.h"
 
 namespace gl {
     void Texture2D::initialize(i32 width, i32 height, u32 internal_format, u32 format, u32 type, u32 wrap, u32 min_filter, u32 mag_filter) {
@@ -45,18 +46,10 @@ namespace gl {
         GLCALL(glDeleteTextures(1, &m_id));
     }
 
-    void Texture2D::storage(i32 width, i32 height, i32 format) {
-        GLCALL(glTexStorage2D(GL_TEXTURE_2D, 1, format, width, height));
-    }
-
     void Texture2D::bind(u32 slot) const
     {
         GLCALL(glActiveTexture(GL_TEXTURE0 + slot));
         GLCALL(glBindTexture(GL_TEXTURE_2D, m_id));
-    }
-
-    void Texture2D::bindImage(u32 access, u32 format) {
-        glBindImageTexture(0, m_id, 0, GL_FALSE, 0, access, format);
     }
 
     void Texture2D::unbind() const

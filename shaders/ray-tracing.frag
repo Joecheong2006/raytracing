@@ -263,7 +263,8 @@ vec3 traceColor(ray r, inout double seed) {
             float t = (r.direction.y + 1) * 0.5;
             vec3 skyColor = (1.0 - t) * vec3(1) + t * vec3(0.5, 0.7, 1);
             skyColor = vec3(0);
-            return incomingLight + skyColor * rayColor; 
+            incomingLight += skyColor * rayColor;
+            break;
         }
 
         vec3 N = info.normal;
@@ -273,16 +274,16 @@ vec3 traceColor(ray r, inout double seed) {
 
         vec3 diffuseDir = normalize(N + normalize(rand3(seed)));
         vec3 specularDir = reflect(V, N);
-        vec3 specularColor = vec3(1);
 
         vec3 nextDir = mix(specularDir, diffuseDir, mats[matIndex].roughness);
         r = Ray(info.point + nextDir * 0.0001, nextDir);
 
         incomingLight += mats[matIndex].emissionColor * mats[matIndex].emissionStrength * rayColor;
-        rayColor *= mats[matIndex].albedo * max(dot(N, nextDir), 0);
+        rayColor *= mix(mats[matIndex].albedo, vec3(1), 1 - mats[matIndex].roughness);
+        // rayColor *= mats[matIndex].albedo;
     }
 
-    return incomingLight / bounces;
+    return incomingLight;
 }
 
 void main() {
@@ -308,13 +309,12 @@ void main() {
     double seed = double(frameIndex * (gl_FragCoord.x + gl_FragCoord.y * resolution.x));
 
     // Random ray at pixel center
-    ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * cam.right +
-                                    (perPixel.y + randND(seed) / resolution.y) * cam.up) * 0.5
-                                    - cameraCenter);
-
     vec3 color = vec3(0.0);
     for (int i = 0; i < rayPerPixel; ++i) {
         seed += i;
+        ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / resolution.x) * cam.right +
+                                    (perPixel.y + randND(seed) / resolution.y) * cam.up) * 0.5
+                                    - cameraCenter);
         color += traceColor(r, seed);
     }
     color /= float(rayPerPixel);

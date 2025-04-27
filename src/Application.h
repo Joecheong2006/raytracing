@@ -1,6 +1,5 @@
 #pragma once
 #include "OpenGL/Quad.h"
-#include "OpenGL/ShaderProgram.h"
 #include "stb_image.h"
 #include "glfw3.h"
 #include "imgui/imgui.h"
@@ -10,9 +9,6 @@ class Application {
 private:
     GLFWwindow* m_window;
     ImGuiIO m_imguiIO;
-    static gl::ShaderProgram* currentShader;
-    static std::string shaderName;
-    static void loadShader(const std::string& name);
 
     friend void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
     friend void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -28,19 +24,17 @@ private:
             glm::vec3 up = glm::vec3(0, 1, 0),
                 right = glm::vec3(1, 0, 0),
                 forward = glm::vec3(0, 0, 1);
+            int bounces = 5, rayPerPixel = 2;
         } cam;
 
         glm::ivec2 resolution;
         bool focus = true;
         float frameIndex = 1;
-        int bounces = 5, rayPerPixel = 2;
-        std::vector<float> screen;
     } detail;
 
     World* world;
 
     void update();
-    void render();
     void imguiRender();
 
 public:
