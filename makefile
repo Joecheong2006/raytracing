@@ -3,7 +3,7 @@ CFLAGS := -std=c++11 -Wall -Wextra -Wpedantic -Wstrict-aliasing -g
 
 SOURCE = src src/**
 LIBRARY = lib/glad/src lib/stb_image
-INCLUDE = -Ilib -Ilib/glad/include -Ilib/stb_image -Ilib/glfw/
+INCLUDE = -Ilib -Ilib/glad/include -Ilib/stb_image -Ilib/glfw/ -Ilib/glm
 
 LIBOBJ = $(wildcard $(patsubst %, %/*.o, $(LIBRARY))) 
 SRC = $(wildcard $(patsubst %, %/*.cpp, $(SOURCE)))
