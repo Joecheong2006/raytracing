@@ -7,6 +7,7 @@
 #include "glm/gtc/type_ptr.hpp"
 #include <cstring>
 #include <string>
+#include <unordered_map>
 
 #include "OpenGL/ComputeShader.h"
 #include "OpenGL/Image2D.h"
@@ -180,11 +181,45 @@ void Application::imguiRender() {
     if (ImGui::SliderFloat("zoom", &detail.cam.fov, 1, 179) ||
         ImGui::SliderInt("bounces", &detail.cam.bounces, 1, 100) ||
         ImGui::SliderInt("rayPerPixel", &detail.cam.rayPerPixel, 1, 10) ||
-        ImGui::SliderFloat("exposure", &detail.exposure, 0, 10) ||
-        ImGui::SliderFloat("gamma", &detail.gamma, 1, 10)
+        ImGui::SliderFloat("gamma", &detail.gamma, 1, 10) ||
+        ImGui::SliderFloat("exposure", &detail.exposure, 0, 10)
         ) {
         detail.frameIndex = 1;
     }
+
+    const char* items[] = { "None", "Agx", "Reinhard ", "ACES Filmic" };
+    static const char* currentItem = items[0];
+    static std::unordered_map<std::string, int> itemsIdxMap = [items]() {
+        std::unordered_map<std::string, int> ret;
+        for (int i = 0; i < (int)(sizeof(items) / sizeof(const char*)); ++i) {
+            ret[items[i]] = i;
+        }
+        return ret;
+    }();
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    float w = ImGui::CalcItemWidth();
+    float spacing = style.ItemInnerSpacing.x;
+    float button_sz = ImGui::GetFrameHeight();
+    ImGui::PushItemWidth(w - spacing * 2.0f - button_sz * 2.0f);
+    if (ImGui::BeginCombo("##combo", currentItem)) // The second parameter is the label previewed before opening the combo.
+    {
+        for (int n = 0; n < IM_ARRAYSIZE(items); n++)
+        {
+            bool is_selected = (currentItem == items[n]);
+            if (ImGui::Selectable(items[n], is_selected)) {
+                printf("%d\n", n);
+                currentItem = items[n];
+                detail.frameIndex = 1;
+                detail.toneMappingMethodIdx = itemsIdxMap[currentItem];
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopItemWidth();
 
     ImGui::BeginTabBar("mats");
     auto& materials = world->getMaterials();
@@ -396,6 +431,7 @@ void Application::run() {
         screenImg.bindTexture(0);
         screenShader.set_2f("resolution", detail.resolution);
         screenShader.set_1i("tex", 0);
+        screenShader.set_1i("toneMappingMethodIdx", detail.toneMappingMethodIdx);
         screenShader.set_1f("exposure", detail.exposure);
         screenShader.set_1f("gamma", detail.gamma);
         GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));

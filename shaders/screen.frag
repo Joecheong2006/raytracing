@@ -7,6 +7,7 @@ in vec2 texCoord;
 uniform vec2 resolution;
 uniform sampler2D tex;
 
+uniform int toneMappingMethodIdx;
 uniform float exposure;
 uniform float gamma;
 
@@ -97,10 +98,25 @@ vec3 agx(vec3 color, int look)
     return clamp(color, 0.0, 1.0);
 }
 
+vec3 RRTAndODTFit(vec3 x) {
+    vec3 a = x * (x + 0.0245786) - 0.000090537;
+    vec3 b = x * (0.983729 * x + 0.4329510) + 0.238081;
+    return a / b;
+}
+
 void main() {
-    // frag_color = vec4(colors[int(gl_FragCoord.x + gl_FragCoord.y * resolution.x)], 1);
     vec3 color = texture(tex, texCoord).rgb;
-    color = agx(color, 0);
+
+    if (toneMappingMethodIdx == 1) { // Agx
+        color = agx(color, 0);
+    }
+    else if (toneMappingMethodIdx == 2) { // Reinhard"
+        color = (color * exposure) / (color * exposure + vec3(1.0));
+    }
+    else if (toneMappingMethodIdx == 3) { // "ACES Filmic"
+        color = RRTAndODTFit(color);
+    }
+
     color = pow(color, vec3(1.0 / gamma));
     frag_color = vec4(color, 1);
 }

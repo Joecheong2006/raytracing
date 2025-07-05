@@ -29,6 +29,7 @@ private:
 
         glm::ivec2 resolution;
         bool focus = true;
+        int toneMappingMethodIdx = 0;
         float exposure = 1.0, gamma = 2.2;
         float frameIndex = 1;
     } detail;
