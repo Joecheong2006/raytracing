@@ -179,7 +179,10 @@ void Application::imguiRender() {
 
     if (ImGui::SliderFloat("zoom", &detail.cam.fov, 1, 179) ||
         ImGui::SliderInt("bounces", &detail.cam.bounces, 1, 100) ||
-        ImGui::SliderInt("rayPerPixel", &detail.cam.rayPerPixel, 1, 10)) {
+        ImGui::SliderInt("rayPerPixel", &detail.cam.rayPerPixel, 1, 10) ||
+        ImGui::SliderFloat("exposure", &detail.exposure, 0, 10) ||
+        ImGui::SliderFloat("gamma", &detail.gamma, 1, 10)
+        ) {
         detail.frameIndex = 1;
     }
 
@@ -333,7 +336,7 @@ void loadScene3(World* world) {
     glm::vec2 b1Len = {1.2, 2.4};
     glm::vec3 b1Pos = {1.2, 0, 1.3};
     glm::vec3 b2Pos = {2.64, 0, 2.5};
-    loadBox(world, b1Len, {pos.x + b1Pos.x, pos.y + b1Pos.y, pos.z - b1Pos.z}, 15);
+    loadBox(world, b1Len, {pos.x + b1Pos.x, pos.y + b1Pos.y, pos.z - b1Pos.z}, 18);
     loadBox(world, {1.15, 1.15}, {pos.x + b2Pos.x, pos.y + b2Pos.y, pos.z - b2Pos.z}, -18);
 }
 
@@ -393,6 +396,8 @@ void Application::run() {
         screenImg.bindTexture(0);
         screenShader.set_2f("resolution", detail.resolution);
         screenShader.set_1i("tex", 0);
+        screenShader.set_1f("exposure", detail.exposure);
+        screenShader.set_1f("gamma", detail.gamma);
         GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
         quad->vao.unbind();
 
