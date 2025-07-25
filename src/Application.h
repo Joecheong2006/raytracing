@@ -17,21 +17,10 @@ private:
 
     gl::Quad* quad;
     struct Detail {
-        struct Camera {
-            glm::vec3 pos;
-            float yaw = 90, pitch = 0, fov = 45;
-
-            glm::vec3 up = glm::vec3(0, 1, 0),
-                right = glm::vec3(1, 0, 0),
-                forward = glm::vec3(0, 0, 1);
-            int bounces = 5, rayPerPixel = 2;
-        } cam;
-
         glm::ivec2 resolution;
         bool focus = true;
         int toneMappingMethodIdx = 0;
-        float exposure = 1.0, gamma = 2.2;
-        float frameIndex = 1;
+        unsigned int frameIndex = 1;
     } detail;
 
     World* world;

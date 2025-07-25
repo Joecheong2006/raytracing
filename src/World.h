@@ -31,6 +31,20 @@ private:
     u32 quadBindingIndex = 3;
 
 public:
+    glm::vec3 skyColor = {0.5, 0.7, 1};
+    float exposure = 1.0, gamma = 2.2;
+
+    struct Camera {
+        glm::vec3 pos;
+        float yaw = 90, pitch = 0, fov = 45;
+
+        glm::vec3 up = glm::vec3(0, 1, 0),
+            right = glm::vec3(1, 0, 0),
+            forward = glm::vec3(0, 0, 1);
+        int bounces = 5, rayPerPixel = 2;
+    } cam;
+
+public:
     World()
         : aabbBuffer(nullptr, 0)
         , materialBuffer(nullptr, 0)
@@ -45,11 +59,18 @@ public:
         (void)aabb;
     }
 
-    void updateBuffer() {
+    void fetchBuffer() {
         aabbBuffer.setBuffer(aabbBoxes.data(), aabbBoxes.size() * sizeof(AABB));
         materialBuffer.setBuffer(materials.data(), materials.size() * sizeof(Material));
         sphereBuffer.setBuffer(spheres.data(), spheres.size() * sizeof(Sphere));
         quadBuffer.setBuffer(quads.data(), quads.size() * sizeof(Quad));
+    }
+
+    void updateBuffer() {
+        aabbBuffer.updateBuffer(aabbBoxes.data(), aabbBoxes.size() * sizeof(AABB));
+        materialBuffer.updateBuffer(materials.data(), materials.size() * sizeof(Material));
+        sphereBuffer.updateBuffer(spheres.data(), spheres.size() * sizeof(Sphere));
+        quadBuffer.updateBuffer(quads.data(), quads.size() * sizeof(Quad));
     }
 
     void bindBuffer() {

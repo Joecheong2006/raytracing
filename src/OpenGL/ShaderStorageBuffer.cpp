@@ -17,6 +17,11 @@ namespace gl {
         GLCALL(glBufferData(GL_SHADER_STORAGE_BUFFER, size, data, GL_DYNAMIC_DRAW));
     }
 
+    void ShaderStorageBuffer::updateBuffer(const void* data, u32 size) {
+        bind();
+        GLCALL(glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, size, data));
+    }
+
     void* ShaderStorageBuffer::getBuffer() const {
         GLCALL(glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_id));
         void* mappedData = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 #include <unordered_map>
+#include <sstream>
 
 #include "OpenGL/ComputeShader.h"
 #include "OpenGL/Image2D.h"
@@ -52,18 +53,18 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     (void)window;
     (void)xoffset;
-    Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
-    det.cam.fov -= yoffset;
-    det.frameIndex = 1;
+    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+    app->world->cam.fov -= yoffset;
+    app->detail.frameIndex = 1;
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     static bool first_mouse = true;
     static glm::vec2 last_pos;
 
-    Application::Detail& det = static_cast<Application*>(glfwGetWindowUserPointer(window))->detail;
+    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
 
-    if (!det.focus) {
+    if (!app->detail.focus) {
         first_mouse = true;
         return;
     }
@@ -73,7 +74,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         last_pos.y = ypos;
         first_mouse = false;
     }
-    det.frameIndex = 1;
+    app->detail.frameIndex = 1;
 
     float xoffset = xpos - last_pos.x;
     float yoffset = last_pos.y - ypos; 
@@ -84,21 +85,21 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
-    det.cam.yaw   += xoffset;
-    det.cam.pitch += yoffset;
+    app->world->cam.yaw   += xoffset;
+    app->world->cam.pitch += yoffset;
 
-    if(det.cam.pitch > 89.0f)
-        det.cam.pitch = 89.0f;
-    if(det.cam.pitch < -89.0f)
-        det.cam.pitch = -89.0f;
+    if(app->world->cam.pitch > 89.0f)
+        app->world->cam.pitch = 89.0f;
+    if(app->world->cam.pitch < -89.0f)
+        app->world->cam.pitch = -89.0f;
 
     glm::vec3 direction;
-    direction.x = cos(glm::radians(180 + det.cam.yaw)) * cos(glm::radians(det.cam.pitch));
-    direction.y = sin(glm::radians(det.cam.pitch));
-    direction.z = sin(glm::radians(det.cam.yaw)) * cos(glm::radians(det.cam.pitch));
-    det.cam.forward = glm::normalize(direction);
-    det.cam.right = normalize(-glm::cross(det.cam.forward, glm::vec3(0, 1, 0)));
-    det.cam.up = glm::cross(-det.cam.right, det.cam.forward);
+    direction.x = cos(glm::radians(180 + app->world->cam.yaw)) * cos(glm::radians(app->world->cam.pitch));
+    direction.y = sin(glm::radians(app->world->cam.pitch));
+    direction.z = sin(glm::radians(app->world->cam.yaw)) * cos(glm::radians(app->world->cam.pitch));
+    app->world->cam.forward = glm::normalize(direction);
+    app->world->cam.right = normalize(-glm::cross(app->world->cam.forward, glm::vec3(0, 1, 0)));
+    app->world->cam.up = glm::cross(-app->world->cam.right, app->world->cam.forward);
 }
 
 Application::Application() {
@@ -151,23 +152,23 @@ void Application::update() {
 
     if (glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS) {
         detail.frameIndex = 1;
-        detail.cam.pos += detail.cam.forward * speed;
+        world->cam.pos += world->cam.forward * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS) {
         detail.frameIndex = 1;
-        detail.cam.pos -= detail.cam.forward * speed;
+        world->cam.pos -= world->cam.forward * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS) {
         detail.frameIndex = 1;
-        detail.cam.pos += detail.cam.right * speed;
+        world->cam.pos += world->cam.right * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS) {
         detail.frameIndex = 1;
-        detail.cam.pos -= detail.cam.right * speed;
+        world->cam.pos -= world->cam.right * speed;
     }
     if (glfwGetKey(m_window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         detail.frameIndex = 1;
-        detail.cam.pos.y += speed;
+        world->cam.pos.y += speed;
     }
 }
 
@@ -178,16 +179,17 @@ void Application::imguiRender() {
 
     ImGui::Begin("status");
 
-    if (ImGui::SliderFloat("zoom", &detail.cam.fov, 1, 179) ||
-        ImGui::SliderInt("bounces", &detail.cam.bounces, 1, 100) ||
-        ImGui::SliderInt("rayPerPixel", &detail.cam.rayPerPixel, 1, 10) ||
-        ImGui::SliderFloat("gamma", &detail.gamma, 1, 10) ||
-        ImGui::SliderFloat("exposure", &detail.exposure, 0, 10)
+    if (ImGui::SliderFloat("zoom", &world->cam.fov, 1, 179) ||
+        ImGui::SliderInt("bounces", &world->cam.bounces, 1, 100) ||
+        ImGui::SliderInt("rayPerPixel", &world->cam.rayPerPixel, 1, 10) ||
+        ImGui::SliderFloat("gamma", &world->gamma, 1, 10) ||
+        ImGui::SliderFloat("exposure", &world->exposure, 0, 10) ||
+        ImGui::ColorEdit3("skyColor", glm::value_ptr(world->skyColor))
         ) {
         detail.frameIndex = 1;
     }
 
-    const char* items[] = { "None", "Agx", "Reinhard ", "ACES Filmic" };
+    const char* items[] = { "None", "Agx", "Reinhard ", "Filmic", "Lottes", "PBRneutral", "Uncharted", "Zcam", "Aces" };
     static const char* currentItem = items[0];
     static std::unordered_map<std::string, int> itemsIdxMap = [items]() {
         std::unordered_map<std::string, int> ret;
@@ -208,7 +210,6 @@ void Application::imguiRender() {
         {
             bool is_selected = (currentItem == items[n]);
             if (ImGui::Selectable(items[n], is_selected)) {
-                printf("%d\n", n);
                 currentItem = items[n];
                 detail.frameIndex = 1;
                 detail.toneMappingMethodIdx = itemsIdxMap[currentItem];
@@ -225,11 +226,16 @@ void Application::imguiRender() {
     auto& materials = world->getMaterials();
     bool hasChanged = false;
     for (u32 i = 0; i < materials.size(); ++i) {
+        ImGui::NewLine();
         ImGui::PushID(i);
-        if (ImGui::ColorEdit3("albedo", glm::value_ptr(materials[i].albedo)) ||
+        if (ImGui::ColorEdit3("emissionColor", glm::value_ptr(materials[i].emissionColor)) ||
+            ImGui::SliderFloat("emissionStrength", &materials[i].emissionStrength, 0, 500) ||
+            ImGui::ColorEdit3("albedo", glm::value_ptr(materials[i].albedo)) ||
+            ImGui::SliderFloat("subsurface", &materials[i].subsurface, 0, 1) ||
             ImGui::SliderFloat("roughness", &materials[i].roughness, 0, 1) ||
-            ImGui::ColorEdit3("emissionColor", glm::value_ptr(materials[i].emissionColor)) ||
-            ImGui::SliderFloat("emissionStrength", &materials[i].emissionStrength, 0, 500)) {
+            ImGui::SliderFloat("metallic", &materials[i].metallic, 0, 1) ||
+            ImGui::SliderFloat("specular", &materials[i].specular, 0, 1) ||
+            ImGui::SliderFloat("specularTint", &materials[i].specularTint, 0, 1)) {
             detail.frameIndex = 1;
             hasChanged = true;
         }
@@ -249,41 +255,53 @@ void Application::imguiRender() {
 void loadCornellBox(World* world, const glm::vec3& pos, float boxLen = 3, float lightLen = 0.7) {
     glm::vec3 red = glm::vec3(.65, .05, .05);
     glm::vec3 green = glm::vec3(.12, .45, .15);
-    glm::vec3 white = glm::vec3(.73, .73, .73);
+    glm::vec3 white = glm::vec3(1.0, 1.0, 1.0);
+
+    Material m;
+    m.roughness = 1.0;
+    m.albedo = glm::vec3(0);
+    m.emissionColor = {1, 1, 1};
+    m.emissionStrength = 20;
+
+    world->add<Quad>(
+            { {pos.x + boxLen * 0.5 + lightLen * 0.5, pos.y + boxLen - 0.000001, pos.z - lightLen * 0.5 - lightLen}, {-lightLen, 0, 0}, {0, 0, -lightLen} },
+            m, false 
+        );
+
+    m.emissionColor = {0, 0, 0};
+    m.emissionStrength = 0;
  
+    m.albedo = white;
     world->add<Quad>(
             { {pos.x, pos.y, pos.z}, {boxLen, 0, 0}, {0, 0, -boxLen} },
-            { white, 1, {0, 0, 0}, 0 }, false 
+            m, false 
         );
 
     world->add<Quad>(
             { {pos.x + boxLen, pos.y + boxLen, pos.z}, {-boxLen, 0, 0}, {0, 0, -boxLen} },
-            { white, 1, {0, 0, 0}, 0 }, false 
+            m, false 
         );
 
     world->add<Quad>(
             { {pos.x + boxLen, pos.y, pos.z}, {-boxLen, 0, 0}, {0, boxLen, 0} },
-            { white, 1, {0, 0, 0}, 0 }, false 
+            m, false 
         );
 
     world->add<Quad>(
             { {pos.x, pos.y, pos.z - boxLen}, {boxLen, 0, 0}, {0, boxLen, 0} },
-            { white, 1, {0, 0, 0}, 0 }, false 
+            m, false 
         );
 
+    m.albedo = red;
     world->add<Quad>(
             { {pos.x, pos.y, pos.z - boxLen}, {0, boxLen, 0}, {0, 0, boxLen} },
-            { red, 1, {0, 0, 0}, 0 }, false 
+            m, false 
         );
 
+    m.albedo = green;
     world->add<Quad>(
             { {pos.x + boxLen, pos.y, pos.z}, {0, boxLen, 0}, {0, 0, -boxLen} },
-            { green, 1, {0, 0, 0}, 0 }, false 
-        );
-
-    world->add<Quad>(
-            { {pos.x + boxLen * 0.5 + lightLen * 0.5, pos.y + boxLen - 0.000001, pos.z - lightLen * 0.5 - lightLen}, {-lightLen, 0, 0}, {0, 0, -lightLen} },
-            { {0, 0, 0}, 0, {1, 1, 1}, 20}, false 
+            m, false 
         );
 }
 
@@ -301,70 +319,90 @@ void loadBox(World* world, glm::vec2 len, glm::vec3 pos, float degree) {
         glm::vec3{len.x, len.y * 2.0f, -len.x} * 0.5f * r,
     };
 
+    Material m;
+    m.roughness = 1;
+    m.albedo = glm::vec3(1);
     world->add<Quad>(
             { pos + b1Vertex[0], b1Vertex[4] - b1Vertex[0], b1Vertex[1] - b1Vertex[0]},
-            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false
+            m, false
         );
 
     world->add<Quad>(
             { pos + b1Vertex[1], b1Vertex[5] - b1Vertex[1], b1Vertex[2] - b1Vertex[1]},
-            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false 
+            m, false 
         );
 
     world->add<Quad>(
             { pos + b1Vertex[2], b1Vertex[6] - b1Vertex[2], b1Vertex[3] - b1Vertex[2] },
-            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false 
+            m, false 
         );
 
     world->add<Quad>(
             { pos + b1Vertex[3], b1Vertex[7] - b1Vertex[3], b1Vertex[0] - b1Vertex[3] },
-            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false 
+            m, false 
         );
 
     world->add<Quad>(
             { pos + b1Vertex[4], b1Vertex[3] - b1Vertex[0], b1Vertex[1] - b1Vertex[0]},
-            { {1, 1, 1}, 1, {0, 0, 0}, 0}, false 
+            m, false 
         );
 }
 
 void loadScene1(World* world) {
+    Material m;
+    m.roughness = 1;
+    m.albedo = {0.7, 0.7, 0.7};
     world->add<Sphere>(
             { 50, {0, -50 - 0.2, 1.2}, 0 },
-            { {0.7, 0.7, 0.7}, 1.0, {0, 0, 0}, 0 }, true
+            m, false
         );
     
+    m.emissionColor = {1, 1, 1};
+    m.emissionStrength = 30;
+    m.albedo = {0, 0, 0};
     world->add<Sphere>(
-            { 5, {0, 3, 15}, 1 },
-            { {0, 0, 0}, 0.3, {1, 1, 1}, 20 }, false
+            { 1, {0, 3, 15}, 1 },
+            m, false
         );
+    m.emissionColor = {0, 0, 0};
+    m.emissionStrength = 0;
 
+    m.albedo = {0.6, 0.3, 0.5};
     world->add<Sphere>(
             { 0.2, {0, 0, 1.2}, 2 },
-            { {0.6, 0.3, 0.5}, 0.0, {0, 0, 0}, 0 }, true
+            m, false
         );
 
+    m.albedo = {0.3, 0.8, 0.5};
     world->add<Sphere>(
             { 0.2, {0.5, 0, 1.2}, 2 },
-            { {0.3, 0.8, 0.5}, 0.1, {0, 0, 0}, 0 }, true
+            m, false
         );
 }
 
 void loadScene2(World* world) {
     float boxLen = 3;
-    float lightLen = 0.7;
-    glm::vec3 pos = {-boxLen * 0.5, -1.4, 2 * boxLen};
+    float lightLen = 0.9;
+    glm::vec3 pos = {-boxLen * 0.5, -boxLen * 0.5, 2 * boxLen};
     glm::vec3 center = pos + glm::vec3{boxLen, 0, -boxLen} * 0.5f;
     loadCornellBox(world, pos, boxLen, lightLen);
 
+    Material m;
+    m.roughness = 1;
+    m.albedo = {1, 1, 1};
+
     world->add<Sphere>(
             { 0.5, center + glm::vec3{0, 1, 0}, 2 },
-            { {1, 1, 1}, 0.1, {0, 0, 0}, 0 }, true
+            m, false
         );
 }
 
 void loadScene3(World* world) {
+    world->skyColor = { 0.0, 0.0, 0.0 };
+    world->cam.fov = 54;
+
     float boxLen = 4;
-    float lightLen = 1.1;
+    float lightLen = 1.2;
     glm::vec3 pos = {-boxLen * 0.5, -2, 2 * boxLen};
     loadCornellBox(world, pos, boxLen, lightLen);
 
@@ -373,6 +411,36 @@ void loadScene3(World* world) {
     glm::vec3 b2Pos = {2.64, 0, 2.5};
     loadBox(world, b1Len, {pos.x + b1Pos.x, pos.y + b1Pos.y, pos.z - b1Pos.z}, 18);
     loadBox(world, {1.15, 1.15}, {pos.x + b2Pos.x, pos.y + b2Pos.y, pos.z - b2Pos.z}, -18);
+}
+
+void RoughnessMetallicTest(World *world) {
+    Material m;
+    m.roughness = 1.0;
+    int groundLen = 10;
+    world->add<Quad>(
+            { {groundLen * 0.5, -0.1 - 1, groundLen * 0.5}, {0, 0, -groundLen}, {-groundLen, 0, 0} }, m, false );
+
+    glm::vec3 red = glm::vec3(.65, .05, .05);
+    m.albedo = red;
+    m.specular = 1;
+    for (int i = 0; i <= 10; ++i) {
+        for (int j = 0; j < 2; ++j) {
+            m.roughness = i / 10.0;
+            m.metallic = j * (1 - i / 10.0);
+            world->add<Sphere>(
+                    { 0.1, {i * 0.3 - groundLen * 0.5 * 0.3, -1, 2 - j * 0.5} }, m, false);
+        }
+    }
+
+    m.emissionColor = {1, 1, 1};
+    m.emissionStrength = 300;
+    m.albedo = {0, 0, 0};
+    world->add<Sphere>(
+            { 1, {-5, 8, -15}, 1 },
+            m, false
+        );
+    m.emissionColor = {0, 0, 0};
+    m.emissionStrength = 0;
 }
 
 void Application::run() {
@@ -384,23 +452,25 @@ void Application::run() {
 
     quad = new gl::Quad(vertices, indices);
 
-    detail.cam.pos = glm::vec3(0);
-    detail.cam.forward = glm::vec3(0, 0, 1);
+    world = new World();
+
+    world->cam.pos = glm::vec3(0);
+    world->cam.forward = glm::vec3(0, 0, 1);
 
     GLCALL(glClearColor(0.1, 0.1, 0.1, 1));
-
-    world = new World();
 
     // loadScene1(world);
     // loadScene2(world);
     loadScene3(world);
+
+    // RoughnessMetallicTest(world);
 
     glm::vec3 dispatchGroups = { (detail.resolution.x + 15) / 16, (detail.resolution.y + 15) / 16, 1 };
 
     gl::ComputeShader compute(SHADER_SOURCE_DIRECTORY "raytrace.comp", dispatchGroups);
     gl::Image2D screenImg(detail.resolution.x, detail.resolution.y);
 
-    world->updateBuffer();
+    world->fetchBuffer();
 
     while(!glfwWindowShouldClose(m_window))
     {
@@ -412,16 +482,17 @@ void Application::run() {
         compute.updateGroups(dispatchGroups);
         compute.bind();
         screenImg.bind(0);
-        compute.set_1f("frameIndex", detail.frameIndex);
+        compute.set_1u("frameIndex", detail.frameIndex);
+        compute.set_3f("skyColor", world->skyColor);
 
-        compute.set_1f("cam.fov", detail.cam.fov);
-        compute.set_3f("cam.position", detail.cam.pos);
-        compute.set_3f("cam.forward", detail.cam.forward);
-        compute.set_3f("cam.right", detail.cam.right);
-        compute.set_3f("cam.up", detail.cam.up);
+        compute.set_1f("cam.fov", world->cam.fov);
+        compute.set_3f("cam.position", world->cam.pos);
+        compute.set_3f("cam.forward", world->cam.forward);
+        compute.set_3f("cam.right", world->cam.right);
+        compute.set_3f("cam.up", world->cam.up);
 
-        compute.set_1i("cam.bounces", detail.cam.bounces);
-        compute.set_1i("cam.rayPerPixel", detail.cam.rayPerPixel);
+        compute.set_1i("cam.bounces", world->cam.bounces);
+        compute.set_1i("cam.rayPerPixel", world->cam.rayPerPixel);
 
         compute.use();
         world->unbindBuffer();
@@ -432,14 +503,15 @@ void Application::run() {
         screenShader.set_2f("resolution", detail.resolution);
         screenShader.set_1i("tex", 0);
         screenShader.set_1i("toneMappingMethodIdx", detail.toneMappingMethodIdx);
-        screenShader.set_1f("exposure", detail.exposure);
-        screenShader.set_1f("gamma", detail.gamma);
+        screenShader.set_1f("exposure", world->exposure);
+        screenShader.set_1f("gamma", world->gamma);
         GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0));
         quad->vao.unbind();
 
-        std::string dur = "render: " + std::to_string((glfwGetTime() - st) * 1000.0) + "ms"
-                        + " frameIndex: " + std::to_string(detail.frameIndex);
-        glfwSetWindowTitle(m_window, dur.c_str());
+        std::stringstream ss;
+        ss << "render: " << (glfwGetTime() - st) * 1000.0 << "ms"
+                        << " frameIndex: " << std::to_string(detail.frameIndex);
+        glfwSetWindowTitle(m_window, ss.str().c_str());
 
         ++detail.frameIndex;
 

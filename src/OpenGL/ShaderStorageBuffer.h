@@ -12,6 +12,7 @@ namespace gl {
         ~ShaderStorageBuffer();
 
         void setBuffer(const void* data, u32 size);
+        void updateBuffer(const void* data, u32 size);
         void* getBuffer() const;
         void bind() const;
         void binding(int point = 0) const;

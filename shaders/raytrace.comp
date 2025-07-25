@@ -4,8 +4,11 @@ layout (local_size_x = 16, local_size_y = 16) in;
 
 layout(rgba32f, binding = 0) uniform image2D screenColors;
 
-#define PI 3.1415926
-#define RAD(x) ((x) * PI / 180.0)
+const float PI = 3.1415926;
+const float INV_PI = 1.0 / PI;
+const float RAD = PI / 180.0;
+
+#define SeedType uint
 
 struct AABB {
     vec2 interval[3];
@@ -13,10 +16,14 @@ struct AABB {
 
 struct Material {
     vec3 albedo;
-    float roughness;
-
     vec3 emissionColor;
     float emissionStrength;
+
+    float subsurface;
+    float roughness;
+    float metallic;
+    float specular;
+    float specularTint;
 };
 
 struct Sphere {
@@ -48,7 +55,8 @@ layout(std430, binding = 3) readonly buffer Quads {
     Quad quads[];
 };
 
-uniform float frameIndex;
+uniform uint frameIndex;
+uniform vec3 skyColor;
 
 struct camera {
     float fov;
@@ -71,72 +79,67 @@ uint pcg(uint v) {
     return (word >> uint(22)) ^ word;
 }
 
-float rand(inout double seed) {
-    seed = double(pcg(uint(seed)));
-    return float(seed) / float(uint(0xffffffff));
+uint hashSeed(uint pixelX, uint pixelY, uint frameIndex, uint sampleIndex) {
+    uint h = pixelX * 73856093u ^ pixelY * 19349663u ^ frameIndex * 83492791u ^ sampleIndex * 2654435761u;
+    return pcg(h);
 }
 
-float randND(inout double seed) {
-    float theta = 2 * PI * rand(seed);
-    float rho = sqrt(-2 * log(rand(seed)));
-    return rho * cos(theta);
+float rand(inout SeedType seed) {
+    seed = pcg(uint(seed));
+    return float(seed) / 4294967296.0;
 }
 
-vec2 rand2(inout double seed) {
-    return vec2(randND(seed), randND(seed)); 
-}
-
-vec3 rand3(inout double seed) {
-    return vec3(randND(seed), randND(seed), randND(seed)); 
+float randFloat(inout SeedType seed) {
+    return rand(seed);
 }
 
 struct ray {
     vec3 origin, direction;
 };
 
-ray Ray(vec3 origin, vec3 direction) {
+ray Ray(in vec3 origin, in vec3 direction) {
     ray result;
     result.origin = origin;
     result.direction = normalize(direction);
     return result;
 }
 
-vec3 rayAt(ray r, float t) {
+vec3 rayAt(in ray r, float t) {
     return r.origin + t * r.direction;
 }
 
-vec3 reflect(vec3 v, vec3 n) {
+vec3 reflect(in vec3 v, in vec3 n) {
     return v - dot(v, n) * n * 2.0;
 }
 
-vec3 randOnHemisphere(vec3 normal, inout double seed) {
-    vec3 rv = rand3(seed);
-
-    vec3 right = normalize(cross(rv, normal));
-    vec3 forward = cross(right, normal);
-
-    rv.x = randND(seed);
-    rv.z = randND(seed);
-    rv.y = (randND(seed) + 1) * 0.5;
-
-    return normalize(rv.x * right + rv.y * normal + rv.z * forward);
-}
-
-bool hitAABB(in AABB aabb, in ray r, in float m) {
+bool hitAABB(in AABB aabb, in ray r, float m) {
     vec2 RI = vec2(0, m);
 
-    for (int axis = 0; axis < 3; ++axis) {
-        float adinv = 1.0 / r.direction[axis];
-        float t0 = (aabb.interval[axis][0] - r.origin[axis]) * adinv;
-        float t1 = (aabb.interval[axis][1] - r.origin[axis]) * adinv;
-        if (min(t0, t1) > max(t0, t1)) {
-            return false;
-        }
+    float adinv = 1.0 / r.direction[0];
+    float t0 = (aabb.interval[0][0] - r.origin[0]) * adinv;
+    float t1 = (aabb.interval[0][1] - r.origin[0]) * adinv;
+    if (min(t0, t1) > max(t0, t1)) {
+        return false;
+    }
+
+    adinv = 1.0 / r.direction[1];
+    t0 = (aabb.interval[1][0] - r.origin[1]) * adinv;
+    t1 = (aabb.interval[1][1] - r.origin[1]) * adinv;
+    if (min(t0, t1) > max(t0, t1)) {
+        return false;
+    }
+
+
+    adinv = 1.0 / r.direction[2];
+    t0 = (aabb.interval[2][0] - r.origin[2]) * adinv;
+    t1 = (aabb.interval[2][1] - r.origin[2]) * adinv;
+    if (min(t0, t1) > max(t0, t1)) {
+        return false;
     }
     return true;
 }
 
-bool hitSphere(in Sphere cir, in ray r, in float max, inout HitInfo info) {
+bool hitSphere(in Sphere cir, in ray r, float max, inout HitInfo info) {
     vec3 dir = cir.center - r.origin;
     float a = dot(r.direction, r.direction);
     float b = -2.0 * dot(r.direction, dir);
@@ -149,7 +152,7 @@ bool hitSphere(in Sphere cir, in ray r, in float max, inout HitInfo info) {
     float sqrtd = sqrt(discriminant);
     info.t = (-b - sqrtd) / (2.0 * a);
 
-    if (!(info.t > 0 && info.t < max)) {
+    if (!(info.t > 1e-3 && info.t < max)) {
         info.t = (-b + sqrtd) / (2.0 * a);
         if (!(info.t > 0 && info.t < max)) {
             return false;
@@ -164,41 +167,38 @@ bool hitSphere(in Sphere cir, in ray r, in float max, inout HitInfo info) {
     return true;
 }
 
-bool hitQuad(in Quad quad, ray r, float max, inout HitInfo info) {
-    vec3 normal = (cross(quad.u, quad.v));
-
+bool hitQuad(in Quad quad, in ray r, float max, inout HitInfo info) {
+    // Precompute normal and its squared length
+    vec3 normal = cross(quad.u, quad.v);
     float denom = dot(normal, r.direction);
+    float nn = dot(normal, normal); // avoid redundant computation
 
-    if (abs(denom) < 1e-8)
-        return false;
+    // Backface cull or skip parallel rays
+    if (abs(denom) < 1e-8) return false;
 
-    float D = dot(normal, quad.q);
-    float t = (D - dot(normal, r.origin)) / denom;
-    if (t <= 0 || t >= max)
-        return false;
+    // Solve plane equation: dot(N, X) = dot(N, P)
+    float t = dot(normal, quad.q - r.origin) / denom;
+    if (t <= 1e-3 || t >= max) return false;
 
-    vec3 w = normal / dot(normal, normal);
-    vec3 intersection = rayAt(r, t);
-    vec3 planar_hitpt_vector = intersection - quad.q;
-    float alpha = dot(w, cross(planar_hitpt_vector, quad.v));
-    float beta = dot(w, cross(quad.u, planar_hitpt_vector));
+    vec3 hitPos = rayAt(r, t);
+    vec3 rel = hitPos - quad.q;
 
-    if (alpha < 0 || alpha > 1 || beta < 0 || beta > 1) {
-        return false;
-    }
+    // Use barycentric-style check in plane coordinates
+    float alpha = dot(normal, cross(rel, quad.v)) / nn;
+    float beta  = dot(normal, cross(quad.u, rel)) / nn;
 
+    // Bounds check inside the quad (0 ≤ alpha, beta ≤ 1)
+    if (alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0) return false;
+
+    // Populate hit info
     info.t = t;
-    info.point = intersection;
-    info.normal = normalize(normal);
-    if (dot(r.direction, info.normal) > 0) {
-        info.normal = -info.normal;
-        return false;
-    }
+    info.point = hitPos;
+    info.normal = denom < 0.0 ? normalize(normal) : -normalize(normal); // Ensure it's facing opposite the ray
 
     return true;
 }
 
-void hit(ray r, out HitInfo track) {
+void hit(in ray r, inout HitInfo track) {
     HitInfo tmp;
 
     float closest = 0xffffff;
@@ -227,6 +227,9 @@ void hit(ray r, out HitInfo track) {
 
         int aabbIndex = quads[i].aabbIndex;
 
+        if (dot(r.direction, cross(quads[i].u, quads[i].v)) > 0)
+            continue;
+
         if (aabbIndex < 0) {
             if (hitQuad(quads[i], r, closest, tmp)) {
                 closest = tmp.t;
@@ -244,38 +247,219 @@ void hit(ray r, out HitInfo track) {
     track.t = closest;
 }
 
-vec3 traceColor(ray r, inout double seed) {
-    vec3 incomingLight = vec3(0);
-    vec3 rayColor = vec3(1);
+vec3 perpendicular(in vec3 v) {
+    return (abs(v.x) > 0.9) ? vec3(0,1,0) : vec3(1,0,0);
+}
+
+vec3 sampleHemisphereCosine(in vec3 N, inout SeedType seed) {
+    float r1 = randFloat(seed);
+    float r2 = randFloat(seed);
+
+    float phi = 2.0 * PI * r1;
+    float cosTheta = sqrt(1.0 - r2);
+    float sinTheta = sqrt(r2);
+
+    vec3 local = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+
+    // Transform from tangent space to world space
+    vec3 T = normalize(cross(N, perpendicular(N)));
+    vec3 B = normalize(cross(N, T));
+    return T * local.x + B * local.y + N * local.z;
+}
+
+vec3 computeF0(in Material mat) {
+    float specular = clamp(mat.specular, 0.0, 1.0);        // user control
+    float tintAmount = clamp(mat.specularTint, 0.0, 1.0);  // influence of albedo
+
+    vec3 f0 = vec3(0.16 * specular * specular);
+    return mix(f0, mat.albedo, mat.metallic);
+
+    vec3 baseTint = vec3(1.0);
+    if (dot(mat.albedo, mat.albedo) > 0.0) {
+        baseTint = normalize(mat.albedo);
+    }
+
+    vec3 tint = mix(vec3(1.0), baseTint, tintAmount);  // weighted albedo tint
+    vec3 dielectricF0 = 0.08 * specular * tint;        // 0.08 ~ empirical fit
+
+    vec3 metalF0 = clamp(mat.albedo, vec3(0.0), vec3(1.0));
+    return mix(dielectricF0, metalF0, mat.metallic);
+}
+
+vec3 fresnelSchlick(float cosTheta, in vec3 F0) {
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float NDF_GGX(float NoH, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float demon = NoH * NoH * (a2 - 1.0) + 1.0;
+    float demon2 = demon * demon;
+    // return a2 / demon2 * INV_PI;
+    return demon2 < 1e-6 ? 1.0 : a2 / demon2 * INV_PI;
+}
+
+float geometrySchlickGGX(float NoV, float roughness) {
+    float a = roughness * roughness;
+    float k = a * 0.5;
+    return NoV / max(NoV * (1.0 - k) + k, 1e-5);
+}
+
+float geometrySmith(float NoV, float NoL, float roughness) {
+    float ggx1 = geometrySchlickGGX(NoV, roughness);
+    float ggx2 = geometrySchlickGGX(NoL, roughness);
+    return ggx1 * ggx2;
+}
+
+float diffusePdf(float NoL) {
+    return NoL * INV_PI;
+}
+
+vec3 sampleGGXVNDF(in vec3 N, in vec3 V, float roughness, inout SeedType seed) {
+    // Transform view to local space
+    float a = roughness * roughness;
+
+    float r1 = randFloat(seed);
+    float r2 = randFloat(seed);
+
+    float phi = 2.0 * PI * r1;
+    float cosTheta = sqrt((1.0 - r2) / (1.0 + (a * a - 1.0) * r2));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    vec3 T = normalize(cross(N, perpendicular(N)));
+    vec3 B = normalize(cross(N, T));
+    mat3 TBN = mat3(T, B, N);
+    vec3 Vlocal = transpose(TBN) * V;
+
+    vec3 Hlocal = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 H = TBN * Hlocal;
+
+    vec3 L = reflect(-V, H);
+    return dot(N, L) > 0.0 ? L : vec3(0.0); // Ensure valid bounce
+}
+
+// === Specular ===
+float specularPdf(float NoH, float VoH, float roughness) {
+    float a = roughness * roughness;
+    float D = NDF_GGX(NoH, roughness);
+    return D * NoH / max(4.0 * VoH, 1e-5);
+}
+
+vec3 shadeSpecular(in Material mat, float NoV, float NoL, float NoH, float VoH) {
+    vec3 F0 = computeF0(mat);
+    vec3 F = fresnelSchlick(VoH, F0);
+    float D = NDF_GGX(NoH, mat.roughness);
+    float G = geometrySmith(NoV, NoL, mat.roughness);
+    return (D * G * F) / max(4.0 * NoV * NoL, 1e-5);
+}
+
+// === Diffuse ===
+vec3 shadeDiffuse(in Material mat, float NoL, float NoV, float VoH) {
+    vec3 F0 = computeF0(mat);
+    vec3 F = fresnelSchlick(VoH, F0);
+    vec3 kd = (vec3(1.0) - F) * (1.0 - mat.metallic);
+
+    float FD90 = 0.5 + 2.0 * dot(F0, vec3(1.0)); // can tweak this
+    float FL = fresnelSchlick(NoL, vec3(1.0)).x;
+    float FV = fresnelSchlick(NoV, vec3(1.0)).x;
+
+    float fresnelDiffuse = (1.0 + (FD90 - 1.0) * pow(1.0 - NoL, 5.0)) *
+                           (1.0 + (FD90 - 1.0) * pow(1.0 - NoV, 5.0));
+    return kd * mat.albedo * INV_PI;
+}
+
+// === Subsurface (approximate Burley diffusion model) ===
+vec3 shadeSubsurface(in Material mat, float NoL, float NoV, float LoV) {
+    float FL = pow(1.0 - NoL, 5.0);
+    float FV = pow(1.0 - NoV, 5.0);
+    float Fd90 = 0.5 + 2.0 * LoV * mat.roughness;
+    float Fd = mix(1.0, Fd90, FL) * mix(1.0, Fd90, FV);
+
+    return mat.albedo * Fd * INV_PI * mat.subsurface;
+}
+
+vec3 traceColor(in ray r, inout SeedType seed) {
+    vec3 incomingLight = vec3(0.0);
+    vec3 rayColor = vec3(1.0);
 
     for (int i = 0; i < cam.bounces; ++i) {
-        seed += i;
-
         HitInfo info;
         hit(r, info);
 
         if (info.t == 0xffffff) {
             float t = (r.direction.y + 1) * 0.5;
-            vec3 skyColor = (1.0 - t) * vec3(1) + t * vec3(0.5, 0.7, 1);
-            skyColor = vec3(0);
-            incomingLight += skyColor * rayColor;
+            vec3 envColor = (1.0 - t) * vec3(1) + t * skyColor;
+            incomingLight += length(skyColor) * envColor * rayColor;
             break;
         }
 
-        vec3 N = info.normal;
-        vec3 V = r.direction;
+        const Material mat = mats[info.matId];
+        const vec3 N = normalize(info.normal);
+        const vec3 V = normalize(-r.direction);
 
-        int matIndex = info.matId;
+        const float roughness = mat.roughness;
 
-        vec3 diffuseDir = normalize(N + normalize(rand3(seed)));
-        vec3 specularDir = reflect(V, N);
+        float subsurfaceProb = mat.subsurface;
+        float diffuseProb = 1.0 - mat.metallic;
+        float specularProb = 0.5 + 0.5 * mat.metallic;
 
-        vec3 nextDir = mix(specularDir, diffuseDir, mats[matIndex].roughness);
-        r = Ray(info.point + nextDir * 0.0001, nextDir);
+        float totalProb = subsurfaceProb + diffuseProb + specularProb;
+        subsurfaceProb /= totalProb;
+        diffuseProb /= totalProb;
+        specularProb /= totalProb;
 
-        incomingLight += mats[matIndex].emissionColor * mats[matIndex].emissionStrength * rayColor;
-        // rayColor *= mix(mats[matIndex].albedo, vec3(1), 1 - mats[matIndex].roughness);
-        rayColor *= mats[matIndex].albedo;
+        vec3 L;
+        const float Xi = randFloat(seed);
+        float diff = 0, spec = 0, subsurface = 0;
+        if (Xi <= diffuseProb) {
+            L = sampleHemisphereCosine(N, seed);
+            diff = 1;
+        } else if (Xi <= diffuseProb + specularProb) {
+            L = sampleGGXVNDF(N, V, roughness, seed);
+            spec = 1;
+        } else { // Subsurface — also treated diffuse-like
+            L = sampleHemisphereCosine(N, seed);
+            subsurface = 1;
+        }
+
+        L = normalize(L);
+
+        const vec3 H = normalize(V + L);
+        const float NoV = clamp(dot(N, V), 0.0, 1.0);
+        const float NoL = clamp(dot(N, L), 0.0, 1.0);
+        const float NoH = clamp(dot(N, H), 0.0, 1.0);
+        const float VoH = clamp(dot(V, H), 0.0, 1.0);
+        const float LoV = clamp(dot(L, V), 0.0, 1.0);
+
+        // Always evaluate both BRDFs and PDFs for MIS
+        const vec3 brdf_sss = shadeSubsurface(mat, NoL, NoV, LoV);
+        const vec3 brdf_spec = shadeSpecular(mat, NoV, NoL, NoH, VoH);
+        const vec3 brdf_diff = shadeDiffuse(mat, NoL, NoV, VoH);
+
+        const float pdf_sss = NoL * INV_PI * subsurfaceProb * subsurface;
+        const float pdf_spec = specularPdf(NoH, VoH, roughness) * specularProb * spec;
+        const float pdf_diff = diffusePdf(NoL) * diffuseProb * diff;
+
+        const float pdf_used = pdf_sss + pdf_spec + pdf_diff;
+
+        const float denom = pdf_diff * pdf_diff + pdf_spec * pdf_spec + pdf_sss * pdf_sss;
+        const float rdenom = 1.0 / max(denom, 1e-5);
+
+        // Combine weighted BRDFs (all lobes)
+        const vec3 brdf_total = ((pdf_spec * pdf_spec) * brdf_spec
+                            + (pdf_diff * pdf_diff) * brdf_diff
+                            + (pdf_sss * pdf_sss) * brdf_sss) * rdenom;
+
+        // Final contribution
+        const vec3 contribution = (brdf_total * NoL) / max(pdf_used, 1e-5);
+
+        // Emission (add before rayColor is updated)
+        if (mat.emissionStrength > 0.0)
+            incomingLight += rayColor * mat.emissionColor * mat.emissionStrength;
+
+        // Continue path
+        rayColor *= contribution;
+        r = Ray(info.point + L * 0.0001, L);
     }
 
     return incomingLight;
@@ -284,6 +468,7 @@ vec3 traceColor(ray r, inout double seed) {
 void main() {
     ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
     ivec2 imgSize = imageSize(screenColors);
+    vec2 rImgSize = 1.0 / vec2(imgSize);
     if (fragCoord.x >= imgSize.x || fragCoord.y >= imgSize.y) {
         return;
     }
@@ -292,34 +477,48 @@ void main() {
     vec3 lookat = cam.forward + cam.position;
     vec3 cameraCenter = cam.position;
 
-    float viewportRatio = imgSize.x / float(imgSize.y);
+    float viewportRatio = imgSize.x * rImgSize.y;
     float focalLength = length(lookat - cameraCenter);
     float fov = cam.fov;
 
-    float viewportHeight = 2.0 * tan(RAD(fov) / 2.0) * focalLength;
+    float viewportHeight = 2.0 * tan(RAD * fov * 0.5) * focalLength;
     float viewportWidth = viewportHeight * viewportRatio;
     vec2 viewport = vec2(viewportWidth, viewportHeight);
 
-    vec3 uv = vec3(fragCoord / vec2(imgSize) * 2.0 - 1.0, 0);
+    vec3 uv = vec3(fragCoord * rImgSize * 2.0 - 1.0, 0);
     uv = viewportWidth * 0.5 * uv.x * cam.right
        + viewportHeight * 0.5 * uv.y * cam.up
        + focalLength * cam.forward
        + cameraCenter;
 
-    vec2 perPixel = viewport / vec2(imgSize.x, imgSize.y);
+    vec2 perPixel = viewport * rImgSize;
 
     // Random ray at pixel center
-    double seed = double(frameIndex * (fragCoord.x + fragCoord.y * imgSize.x));
+    SeedType seed;
     vec3 color = vec3(0.0);
-    for (int i = 0; i < cam.rayPerPixel; ++i) {
-        seed += i;
-        ray r = Ray(cameraCenter, uv + ((perPixel.x + randND(seed) / imgSize.x) * cam.right +
-                                    (perPixel.y + randND(seed) / imgSize.y) * cam.up) * 0.5
-                                    - cameraCenter);
-        color += traceColor(r, seed);
-    }
-    color /= float(cam.rayPerPixel);
 
-    vec4 finalColor = (imageLoad(screenColors, fragCoord) * (float(frameIndex) - 1.0) + vec4(color, 1)) / float(frameIndex);
+    int ssq = int(sqrt(cam.rayPerPixel));
+    float rssq = 1.0 / ssq;
+    for (int i = 0; i < ssq; ++i) {
+        for (int j = 0; j < ssq; ++j) {
+            seed = SeedType(hashSeed(uint(fragCoord.x), uint(fragCoord.y), frameIndex, j + i * ssq));
+            ray r = Ray(cameraCenter, uv + ((j + randFloat(seed)) * rssq) * rImgSize.x * cam.right +
+                                        ((i + randFloat(seed)) * rssq) * rImgSize.y * cam.up
+                                        - cameraCenter);
+            color += traceColor(r, seed);
+        }
+    }
+    color *= rssq * rssq;
+
+    // for (int i = 0; i < cam.rayPerPixel; ++i) {
+    //     seed = SeedType(hashSeed(uint(fragCoord.x), uint(fragCoord.y), frameIndex, i));
+    //     ray r = Ray(cameraCenter, uv + ((perPixel.x + randFloat(seed) * rImgSize.x) * cam.right +
+    //                                 (perPixel.y + randFloat(seed) * rImgSize.y) * cam.up)
+    //                                 - cameraCenter);
+    //     color += traceColor(r, seed);
+    // }
+    // color /= float(cam.rayPerPixel);
+
+    vec4 finalColor = (imageLoad(screenColors, fragCoord) * (float(frameIndex) - 1.0) + vec4(color, 1.0)) / float(frameIndex);
     imageStore(screenColors, fragCoord, finalColor);
 }
