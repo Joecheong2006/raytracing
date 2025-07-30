@@ -37,9 +37,9 @@ vec3 tonemapAGX(vec3 x) {
     return clamp(mapped, vec3(0.0), vec3(1.0));
 }
 
-vec3 applyAGXAndSRGB(vec3 hdr) {
+vec3 applyAGXAndSRGB(vec3 hdr, float gamma) {
     vec3 tm = tonemapAGX(hdr);
-    return pow(tm, vec3(1.0 / 2.2));
+    return pow(tm, vec3(1.0 / gamma));
 }
 
 //filmic
@@ -344,7 +344,7 @@ void main() {
 
     // Tone Mapping
     if (toneMappingMethodIdx == 1) { // Agx
-        color = applyAGXAndSRGB(color * exposure);
+        color = applyAGXAndSRGB(color * exposure, gamma);
     }
     else if (toneMappingMethodIdx == 2) { // Reinhard
         color = (color * exposure) / (color * exposure + vec3(1.0));
